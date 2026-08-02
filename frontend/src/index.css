@@ -1,0 +1,192 @@
+@import "tw-animate-css";
+@import "@fontsource-variable/geist";
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Canopy — Emerald Glass keyframes (referenced via --animate-* below) */
+@keyframes canopy-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes canopy-pulse-ring {
+    from { box-shadow: 0 0 0 0 oklch(0.773 0.153 163.2 / 45%); }
+    to   { box-shadow: 0 0 0 10px oklch(0.773 0.153 163.2 / 0%); }
+}
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+
+    /* --- Canopy brand extensions: used directly as bg-canopy-*, text-canopy-*,
+       rounded-canopy, shadow-glass, backdrop-blur-glass, animate-canopy-* --- */
+    --color-canopy-primary: var(--canopy-primary);
+    --color-canopy-secondary: var(--canopy-secondary);
+    --color-canopy-accent: var(--canopy-accent);
+    --color-canopy-bg: var(--canopy-bg);
+    --color-canopy-ok: var(--canopy-primary);
+    --color-canopy-warn: var(--canopy-warn);
+    --color-canopy-error: var(--canopy-error);
+
+    --radius-canopy: 24px;
+    --radius-canopy-sm: 14px;
+    --blur-glass: 20px;
+
+    --shadow-glass: 0 8px 32px oklch(0 0 0 / 25%);
+    --shadow-glass-hover: 0 12px 40px oklch(0 0 0 / 32%);
+    --shadow-glow-primary: 0 0 24px var(--canopy-glow-primary);
+
+    --animate-canopy-rise: canopy-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    --animate-canopy-pulse: canopy-pulse-ring 1.6s ease-out infinite;
+}
+
+:root {
+    /* Sprout Light — used only if/when the light-mode toggle from the brief ships */
+    --background: oklch(0.991 0.004 157.2);
+    --foreground: oklch(0.18 0.02 165);
+    --card: oklch(1 0 0 / 70%);
+    --card-foreground: oklch(0.18 0.02 165);
+    --popover: oklch(1 0 0 / 96%);
+    --popover-foreground: oklch(0.18 0.02 165);
+    --primary: oklch(0.696 0.149 162.5);       /* Emerald #10B981 */
+    --primary-foreground: oklch(0.145 0 0);
+    --secondary: oklch(0.96 0.01 165);
+    --secondary-foreground: oklch(0.18 0.02 165);
+    --muted: oklch(0.96 0.01 165);
+    --muted-foreground: oklch(0.5 0.02 165);
+    --accent: oklch(0.773 0.153 163.2 / 16%);   /* Mint #34D399, translucent */
+    --accent-foreground: oklch(0.18 0.02 165);
+    --destructive: oklch(0.711 0.166 22.2);     /* #F87171 */
+    --border: oklch(0.02 0.01 165 / 10%);
+    --input: oklch(0.02 0.01 165 / 12%);
+    --ring: oklch(0.696 0.149 162.5 / 60%);
+    --chart-1: oklch(0.696 0.149 162.5);
+    --chart-2: oklch(0.773 0.153 163.2);
+    --chart-3: oklch(0.768 0.204 130.8);
+    --chart-4: oklch(0.55 0.14 172);
+    --chart-5: oklch(0.4 0.1 175);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.98 0.006 165);
+    --sidebar-foreground: oklch(0.18 0.02 165);
+    --sidebar-primary: oklch(0.696 0.149 162.5);
+    --sidebar-primary-foreground: oklch(0.145 0 0);
+    --sidebar-accent: oklch(0.773 0.153 163.2 / 14%);
+    --sidebar-accent-foreground: oklch(0.18 0.02 165);
+    --sidebar-border: oklch(0.02 0.01 165 / 10%);
+    --sidebar-ring: oklch(0.696 0.149 162.5 / 60%);
+
+    /* Canopy raw brand tokens */
+    --canopy-primary: oklch(0.696 0.149 162.5);
+    --canopy-secondary: oklch(0.768 0.204 130.8);
+    --canopy-accent: oklch(0.773 0.153 163.2);
+    --canopy-bg: oklch(0.991 0.004 157.2);
+    --canopy-warn: oklch(0.861 0.173 91.9);
+    --canopy-error: oklch(0.711 0.166 22.2);
+    --canopy-glow-primary: oklch(0.696 0.149 162.5 / 35%);
+}
+
+.dark {
+    /* Dark Forest — the default theme per the brief */
+    --background: oklch(0.163 0.008 163.8);    /* #0B0F0D */
+    --foreground: oklch(0.97 0.006 165);
+    --card: oklch(1 0 0 / 6%);                  /* glass surface, painted over --background */
+    --card-foreground: oklch(0.97 0.006 165);
+    --popover: oklch(0.2 0.015 165);            /* solid enough for legible dropdown/menu content */
+    --popover-foreground: oklch(0.97 0.006 165);
+    --primary: oklch(0.696 0.149 162.5);        /* Emerald #10B981 */
+    --primary-foreground: oklch(0.145 0 0);
+    --secondary: oklch(1 0 0 / 6%);
+    --secondary-foreground: oklch(0.97 0.006 165);
+    --muted: oklch(1 0 0 / 5%);
+    --muted-foreground: oklch(1 0 0 / 56%);
+    --accent: oklch(0.773 0.153 163.2 / 14%);   /* Mint #34D399, translucent hover */
+    --accent-foreground: oklch(0.97 0.006 165);
+    --destructive: oklch(0.711 0.166 22.2);     /* #F87171 */
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.773 0.153 163.2 / 60%);
+    --chart-1: oklch(0.696 0.149 162.5);        /* Emerald */
+    --chart-2: oklch(0.773 0.153 163.2);        /* Mint */
+    --chart-3: oklch(0.768 0.204 130.8);        /* Lime */
+    --chart-4: oklch(0.55 0.14 172);            /* deep teal-green */
+    --chart-5: oklch(0.4 0.1 175);              /* darkest green */
+    --sidebar: oklch(0.14 0.008 164);
+    --sidebar-foreground: oklch(0.97 0.006 165);
+    --sidebar-primary: oklch(0.696 0.149 162.5);
+    --sidebar-primary-foreground: oklch(0.145 0 0);
+    --sidebar-accent: oklch(0.696 0.149 162.5 / 15%);
+    --sidebar-accent-foreground: oklch(0.97 0.006 165);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.773 0.153 163.2 / 60%);
+
+    /* Canopy raw brand tokens */
+    --canopy-primary: oklch(0.696 0.149 162.5);
+    --canopy-secondary: oklch(0.768 0.204 130.8);
+    --canopy-accent: oklch(0.773 0.153 163.2);
+    --canopy-bg: oklch(0.163 0.008 163.8);
+    --canopy-warn: oklch(0.861 0.173 91.9);
+    --canopy-error: oklch(0.711 0.166 22.2);
+    --canopy-glow-primary: oklch(0.696 0.149 162.5 / 35%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+/* Ambient page background: dark-forest gradient + faint radial glow.
+   Apply on top-level layout wrappers, e.g. <div className="canopy-app-bg"> */
+.canopy-app-bg {
+  background:
+    radial-gradient(60% 50% at 15% 0%, oklch(0.696 0.149 162.5 / 10%) 0%, transparent 60%),
+    radial-gradient(50% 40% at 100% 100%, oklch(0.768 0.204 130.8 / 6%) 0%, transparent 60%),
+    var(--background);
+  min-height: 100vh;
+}

@@ -1,0 +1,47 @@
+/* Canopy — Emerald Glass design tokens
+   Source: Hydroponics Platform Design System v1.0 */
+
+:root {
+  /* Brand */
+  --canopy-primary: #10B981;      /* Emerald */
+  --canopy-secondary: #84CC16;    /* Lime */
+  --canopy-accent: #34D399;       /* Mint */
+
+  /* Surface */
+  --canopy-bg: #0B0F0D;           /* Dark Forest */
+  --canopy-bg-elevated: #10151280;
+
+  /* Glass */
+  --canopy-glass-bg: rgba(255, 255, 255, 0.06);
+  --canopy-glass-bg-hover: rgba(255, 255, 255, 0.09);
+  --canopy-glass-border: rgba(255, 255, 255, 0.12);
+  --canopy-glass-blur: 20px;
+  --canopy-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --canopy-radius: 24px;
+  --canopy-radius-sm: 14px;
+
+  /* Text */
+  --canopy-text-primary: rgba(255, 255, 255, 0.92);
+  --canopy-text-secondary: rgba(255, 255, 255, 0.56);
+  --canopy-text-muted: rgba(255, 255, 255, 0.36);
+
+  /* Status */
+  --canopy-status-ok: #34D399;
+  --canopy-status-warn: #FACC15;
+  --canopy-status-error: #F87171;
+  --canopy-status-off: rgba(255, 255, 255, 0.24);
+
+  /* Motion */
+  --canopy-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Ambient background: dark forest gradient + faint radial glow,
+   used on the html/body of pages that host Canopy screens */
+.canopy-app-bg {
+  background:
+    radial-gradient(60% 50% at 15% 0%, rgba(16, 185, 129, 0.10) 0%, transparent 60%),
+    radial-gradient(50% 40% at 100% 100%, rgba(132, 204, 22, 0.06) 0%, transparent 60%),
+    var(--canopy-bg);
+  min-height: 100vh;
+  color: var(--canopy-text-primary);
+}
