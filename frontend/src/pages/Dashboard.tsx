@@ -1,12 +1,14 @@
+import { useMemo, useState } from "react";
 import { Bell, Settings, User, Loader2, AlertTriangle } from "lucide-react";
 import { GlassCard } from "../components/common/GlassCard";
 import { MetricCard } from "../components/dashboard/MetricCard";
-import { ChartCard, type ChartPoint } from "../components/dashboard/ChartCard";
+import { LiveChart } from "../components/dashboard/LiveChart";
+import { TimeframeSelector } from "../components/dashboard/TimeframeSelector";
 import { WaterTank, type WaterLevelState } from "../components/dashboard/WaterTank";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { HealthRing } from "../components/dashboard/HealthRing";
 import { useLatestSensor, useSensorHistory } from "../hooks/useSensors";
-import type { SensorHistory } from "@/types/sensor";
+import { filterHistoryByTimeframe, type Timeframe } from "../lib/chartUtils";
 
 function formatMetric(value: number | undefined, fractionDigits = 1): string {
   return value !== undefined ? value.toFixed(fractionDigits) : "—";
@@ -22,7 +24,10 @@ function mapWaterLevel(distance: number | undefined): {
   state: WaterLevelState;
 } {
   if (distance === undefined) {
-    return { percent: 0, state: "critical" };
+    return {
+      percent: 0,
+      state: "critical",
+    };
   }
 
   const FULL_DISTANCE = 9;
@@ -53,30 +58,6 @@ function mapWaterLevel(distance: number | undefined): {
   };
 }
 
-
-
-/**
- * Converts raw backend history readings into ChartCard's expected
- * { t, value } shape, plotting water_temperature over time.
- */
-function toTemperatureSeries(history: SensorHistory | undefined): ChartPoint[] {
-  if (!history) return [];
-
-  // Only keep the latest 50 readings
-  const recent = history.slice(-50);
-
-  return recent.map((reading) => {
-    const date = new Date(reading.timestamp);
-    const hh = date.getHours().toString().padStart(2, "0");
-    const mm = date.getMinutes().toString().padStart(2, "0");
-
-    return {
-      t: `${hh}:${mm}`,
-      value: reading.water_temperature,
-    };
-  });
-}
-
 export default function Dashboard() {
   const { data, loading, error } = useLatestSensor();
   const {
@@ -85,8 +66,17 @@ export default function Dashboard() {
     error: historyError,
   } = useSensorHistory();
 
+  const [timeframe, setTimeframe] = useState<Timeframe>("1h");
+
   const waterLevel = mapWaterLevel(data?.water_level);
-  const temperatureSeries = toTemperatureSeries(history);
+<WaterTank
+  percent={waterLevel.percent}
+  state={waterLevel.state}
+/>
+  const filteredHistory = useMemo(
+    () => filterHistoryByTimeframe(history ?? [], timeframe),
+    [history, timeframe]
+  );
 
   return (
     <div className="space-y-6 p-8">
@@ -146,49 +136,73 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              {historyLoading && !history ? (
-                <GlassCard className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm text-white/56">
+              <span className="text-base leading-none">📊</span>
+              <span>Live Analytics</span>
+            </div>
+            <TimeframeSelector value={timeframe} onChange={setTimeframe} />
+          </div>
+
+          {historyLoading && !history ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {["Temperature", "pH", "EC", "TDS"].map((label) => (
+                <GlassCard key={label} className="flex flex-col gap-4">
                   <div className="flex items-center gap-2 text-sm text-white/56">
                     <span className="text-base leading-none">📈</span>
-                    <span>Live Temperature Graph</span>
+                    <span>{label}</span>
                   </div>
                   <div className="flex h-[220px] w-full items-center justify-center gap-3 text-white/40">
                     <Loader2 size={18} className="animate-spin" />
                     <span>Loading history…</span>
                   </div>
                 </GlassCard>
-              ) : historyError ? (
-                <GlassCard className="flex flex-col gap-4">
-                  <div className="flex items-center gap-2 text-sm text-white/56">
-                    <span className="text-base leading-none">📈</span>
-                    <span>Live Temperature Graph</span>
-                  </div>
-                  <div className="flex h-[220px] w-full items-center justify-center gap-2 text-red-300">
-                    <AlertTriangle size={16} />
-                    <span>Failed to load history</span>
-                  </div>
-                </GlassCard>
-              ) : temperatureSeries.length === 0 ? (
-                <GlassCard className="flex flex-col gap-4">
-                  <div className="flex items-center gap-2 text-sm text-white/56">
-                    <span className="text-base leading-none">📈</span>
-                    <span>Live Temperature Graph</span>
-                  </div>
-                  <div className="flex h-[220px] w-full items-center justify-center text-white/40">
-                    No historical data
-                  </div>
-                </GlassCard>
-              ) : (
-                <ChartCard title="Live Temperature Graph" icon="📈" data={temperatureSeries} unit="°C" />
-              )}
+              ))}
             </div>
-            <WaterTank percent={waterLevel.percent} state={waterLevel.state} />
-          </div>
+          ) : historyError ? (
+            <GlassCard className="flex items-center gap-3 border border-red-500/30 bg-red-500/10 p-4 text-red-200">
+              <AlertTriangle size={18} />
+              <span>Failed to load history: {historyError?.message ?? "Unknown error"}</span>
+            </GlassCard>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <LiveChart
+                title="Temperature"
+                icon="🌡"
+                dataKey="water_temperature"
+                color="#34D399"
+                unit="°C"
+                data={filteredHistory}
+              />
+              <LiveChart
+                title="pH Level"
+                icon="🧪"
+                dataKey="ph"
+                color="#A78BFA"
+                data={filteredHistory}
+              />
+              <LiveChart
+                title="EC"
+                icon="⚡"
+                dataKey="ec"
+                color="#60A5FA"
+                unit="ppm"
+                data={filteredHistory}
+              />
+              <LiveChart
+                title="TDS"
+                icon="💧"
+                dataKey="tds"
+                color="#FBBF24"
+                unit="ppm"
+                data={filteredHistory}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <GlassCard className="flex flex-wrap items-center gap-3 lg:col-span-2">
+            <WaterTank percent={waterLevel.percent} state={waterLevel.state} />
+            <GlassCard className="flex flex-wrap items-center gap-3">
               <StatusPill label="Pump" state={data?.pump_status ? "ok" : "off"} />
               <StatusPill label="ESP32" state="ok" />
               <StatusPill label="WiFi" state="ok" />
