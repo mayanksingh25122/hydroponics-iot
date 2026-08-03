@@ -2,7 +2,7 @@
 @import "@fontsource-variable/geist";
 @import "tailwindcss";
 
-/* @custom-variant dark (&:is(.dark *));  -- removed to avoid unknown at-rule warning */
+@custom-variant dark (&:is(.dark *));
 
 /* Canopy — Emerald Glass keyframes (referenced via --animate-* below) */
 @keyframes canopy-rise {
@@ -14,7 +14,7 @@
     to   { box-shadow: 0 0 0 10px oklch(0.773 0.153 163.2 / 0%); }
 }
 
-:root {
+@theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
 
@@ -171,17 +171,14 @@
 
 @layer base {
   * {
-    border-color: var(--color-border);
-  }
-
+    @apply border-border outline-ring/50;
+    }
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-  }
-
+    @apply bg-background text-foreground;
+    }
   html {
-    font-family: var(--font-sans);
-  }
+    @apply font-sans;
+    }
 }
 
 /* Ambient page background: dark-forest gradient + faint radial glow.
