@@ -1,8 +1,21 @@
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
 import { GlassCard } from "../common/GlassCard";
 import type { SensorReading } from "@/types/sensor";
 
-export type SensorNumericKey = "ph" | "tds" | "ec" | "water_temperature";
+export type SensorNumericKey =
+  | "ph"
+  | "tds"
+  | "ec"
+  | "water_temperature";
 
 export interface LiveChartProps {
   title: string;
@@ -21,23 +34,23 @@ interface LiveChartPoint {
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
-  const hh = date.getHours().toString().padStart(2, "0");
-  const mm = date.getMinutes().toString().padStart(2, "0");
-  return `${hh}:${mm}`;
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function toChartPoints(data: SensorReading[], dataKey: SensorNumericKey): LiveChartPoint[] {
+function toChartPoints(
+  data: SensorReading[],
+  dataKey: SensorNumericKey
+): LiveChartPoint[] {
   return data.map((reading) => ({
     t: formatTime(reading.timestamp),
     value: reading[dataKey],
   }));
 }
 
-/**
- * Reusable live-updating chart card. Consumes raw SensorReading[] plus
- * a numeric field key so a single component can back all four metric
- * charts (Temperature, pH, EC, TDS) without duplicating chart config.
- */
 export function LiveChart({
   title,
   color,
@@ -45,65 +58,152 @@ export function LiveChart({
   data,
   dataKey,
   icon = "📈",
-  height = 220,
+  height = 260,
 }: LiveChartProps) {
   const points = toChartPoints(data, dataKey);
-  const gradientId = `canopy-livechart-${dataKey}`;
+
+  const gradientId = `gradient-${dataKey}`;
 
   return (
-    <GlassCard className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 text-sm text-white/56">
-        <span className="text-base leading-none">{icon}</span>
-        <span>{title}</span>
+    <GlassCard className="group relative overflow-hidden transition-all duration-500 hover:-translate-y-1">
+
+      {/* Background Glow */}
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-green-400/5 opacity-0 transition duration-500 group-hover:opacity-100" />
+
+      {/* Header */}
+      <div className="relative mb-5 flex items-center gap-3">
+
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/15 shadow-[0_0_20px_rgba(34,197,94,.2)]">
+          <span className="text-xl">{icon}</span>
+        </div>
+
+        <div>
+          <h3 className="text-base font-semibold text-white">
+            {title}
+          </h3>
+
+          <p className="text-xs text-emerald-200/60">
+            Live Sensor History
+          </p>
+        </div>
+
       </div>
 
       {points.length === 0 ? (
-        <div className="flex items-center justify-center text-white/40" style={{ height }}>
-          No historical data
+        <div
+          className="flex items-center justify-center rounded-2xl border border-dashed border-emerald-500/20 bg-emerald-500/5 text-emerald-200/40"
+          style={{ height }}
+        >
+          No Data Available
         </div>
       ) : (
         <div style={{ width: "100%", height }}>
+
           <ResponsiveContainer>
-            <AreaChart data={points} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+
+            <AreaChart
+              data={points}
+              margin={{
+                top: 5,
+                right: 10,
+                left: -20,
+                bottom: 5,
+              }}
+            >
+
               <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.45} />
-                  <stop offset="55%" stopColor={color} stopOpacity={0.15} />
-                  <stop offset="100%" stopColor={color} stopOpacity={0} />
+
+                <linearGradient
+                  id={gradientId}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+
+                  <stop
+                    offset="0%"
+                    stopColor={color}
+                    stopOpacity={0.45}
+                  />
+
+                  <stop
+                    offset="60%"
+                    stopColor={color}
+                    stopOpacity={0.15}
+                  />
+
+                  <stop
+                    offset="100%"
+                    stopColor={color}
+                    stopOpacity={0}
+                  />
+
                 </linearGradient>
+
               </defs>
-              <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+
+              <CartesianGrid
+                stroke="rgba(255,255,255,.06)"
+                strokeDasharray="3 3"
+                vertical={false}
+              />
+
               <XAxis
                 dataKey="t"
-                stroke="rgba(255,255,255,0.24)"
-                tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }}
+                tick={{
+                  fill: "#A7F3D0",
+                  fontSize: 11,
+                }}
                 tickLine={false}
                 axisLine={false}
-                minTickGap={24}
               />
-              <YAxis hide domain={["auto", "auto"]} />
+
+              <YAxis
+                hide
+              />
+
               <Tooltip
-                contentStyle={{
-                  background: "rgba(11, 15, 13, 0.92)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 12,
-                  fontSize: 12,
-                  color: "rgba(255,255,255,0.9)",
+                cursor={{
+                  stroke: color,
+                  strokeOpacity: 0.3,
                 }}
-                labelStyle={{ color: "rgba(255,255,255,0.5)" }}
-                formatter={(value) => [`${value ?? "—"}${unit ?? ""}`, "Value"]}
+                contentStyle={{
+                  background: "#08140D",
+                  border: "1px solid rgba(34,197,94,.15)",
+                  borderRadius: "16px",
+                  color: "#fff",
+                  backdropFilter: "blur(12px)",
+                }}
+                labelStyle={{
+                  color: "#86EFAC",
+                }}
+              formatter={(value) => [
+  `${value}${unit ?? ""}`,
+  title,
+]}
               />
+
               <Area
                 type="monotone"
                 dataKey="value"
                 stroke={color}
-                strokeWidth={2}
+                strokeWidth={3}
                 fill={`url(#${gradientId})`}
-                isAnimationActive
-                animationDuration={600}
+                animationDuration={800}
+                dot={false}
+                activeDot={{
+                  r: 6,
+                  fill: color,
+                  stroke: "#fff",
+                  strokeWidth: 2,
+                }}
               />
+
             </AreaChart>
+
           </ResponsiveContainer>
+
         </div>
       )}
     </GlassCard>

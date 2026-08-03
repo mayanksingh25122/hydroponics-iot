@@ -11,17 +11,24 @@ export interface WaterTankProps {
 }
 
 const stateColor: Record<WaterLevelState, string> = {
-  full: "from-canopy-primary to-canopy-accent",
-  ok: "from-canopy-primary to-canopy-accent",
-  low: "from-canopy-warn to-canopy-secondary",
-  critical: "from-canopy-error to-red-400",
+  full: "from-emerald-400 via-emerald-500 to-green-600",
+  ok: "from-emerald-400 via-emerald-500 to-green-600",
+  low: "from-yellow-300 via-yellow-400 to-orange-400",
+  critical: "from-red-400 via-red-500 to-red-700",
+};
+
+const stateGlow: Record<WaterLevelState, string> = {
+  full: "shadow-[0_0_45px_rgba(16,185,129,.45)]",
+  ok: "shadow-[0_0_35px_rgba(16,185,129,.35)]",
+  low: "shadow-[0_0_35px_rgba(250,204,21,.35)]",
+  critical: "shadow-[0_0_40px_rgba(239,68,68,.40)]",
 };
 
 const stateLabel: Record<WaterLevelState, string> = {
-  full: "Full",
-  ok: "Good",
-  low: "Low — Refill Soon",
-  critical: "Critical — Refill Now",
+  full: "Tank Full",
+  ok: "Water Level Good",
+  low: "Refill Soon",
+  critical: "Critical Level",
 };
 
 const ANIMATION_DURATION = 1800;
@@ -92,46 +99,92 @@ export function WaterTank({
   return (
     <GlassCard
       className={cn(
-        "flex flex-col gap-4",
+        "group flex flex-col gap-5 transition-all duration-300 hover:-translate-y-1",
         className
       )}
     >
-      <div className="flex items-center gap-2 text-sm text-white/60">
-        <span className="text-base">💧</span>
-        <span>Water Tank</span>
-      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-white">
+          <span className="text-xl">💧</span>
+          <span className="font-semibold">Water Tank</span>
+        </div>
 
-      <div className="relative h-44 overflow-hidden rounded-canopy-sm border border-white/10 bg-white/[0.03]">
-
-        <div
-          className={cn(
-            "absolute bottom-0 left-0 right-0 bg-gradient-to-t",
-            stateColor[state]
-          )}
-          style={{
-            height: `${shownPercent}%`,
-            transition: "height 1.8s ease-in-out",
-          }}
-        />
-
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-3xl font-bold text-white drop-shadow-lg">
-            {shownPercent}%
-          </span>
+        <div className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
+          LIVE
         </div>
       </div>
 
-      <div
-        className={cn(
-          "text-center text-sm font-medium",
-          state === "critical"
-            ? "text-canopy-error"
-            : state === "low"
-            ? "text-canopy-warn"
-            : "text-white/70"
-        )}
-      >
-        {stateLabel[state]}
+      <div className="mx-auto flex h-64 w-36 items-end justify-center rounded-[32px] border border-white/10 bg-white/5 p-2">
+
+        <div className="relative h-full w-full overflow-hidden rounded-[24px] border border-white/10 bg-[#08140D]">
+
+          <div
+            className={cn(
+              "absolute bottom-0 left-0 right-0 bg-gradient-to-t transition-all duration-[1800ms]",
+              stateColor[state],
+              stateGlow[state]
+            )}
+            style={{
+              height: `${shownPercent}%`,
+            }}
+          >
+            <div className="absolute top-0 left-0 h-3 w-full animate-pulse bg-white/25 blur-sm" />
+          </div>
+
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+
+            <span className="text-5xl font-bold text-white drop-shadow-xl">
+              {shownPercent}
+            </span>
+
+            <span className="text-lg text-emerald-300">
+              %
+            </span>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <div className="space-y-2">
+
+        <div className="flex justify-between text-sm">
+
+          <span className="text-white/60">
+            Status
+          </span>
+
+          <span
+            className={cn(
+              "font-semibold",
+              state === "critical"
+                ? "text-red-400"
+                : state === "low"
+                ? "text-yellow-400"
+                : "text-emerald-400"
+            )}
+          >
+            {stateLabel[state]}
+          </span>
+
+        </div>
+
+        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+
+          <div
+            className={cn(
+              "h-full rounded-full bg-gradient-to-r",
+              stateColor[state]
+            )}
+            style={{
+              width: `${shownPercent}%`,
+              transition: "width 1.8s ease",
+            }}
+          />
+
+        </div>
+
       </div>
     </GlassCard>
   );

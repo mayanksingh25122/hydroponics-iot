@@ -1,56 +1,82 @@
-import type { ReactNode } from "react";
-import { cn } from "../../lib/utils";
+import { TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { GlassCard } from "../common/GlassCard";
+import { cn } from "../../lib/utils";
 
-export interface MetricCardProps {
-  /** Domain emoji per the brand identity system: 🌡 💧 🧪 ⚡ */
-  icon: ReactNode;
+interface Delta {
+  direction: "up" | "down" | "flat";
+  text: string;
+}
+
+interface MetricCardProps {
+  icon: string;
   label: string;
   value: string;
   unit?: string;
-  /** e.g. "+0.6°C Today" — omit if there's nothing to compare against */
-  delta?: {
-    direction: "up" | "down" | "flat";
-    text: string;
-  };
+  delta?: Delta;
   className?: string;
 }
 
-const deltaColor: Record<"up" | "down" | "flat", string> = {
-  up: "text-canopy-primary",
-  down: "text-canopy-error",
-  flat: "text-white/40",
+const deltaIcon = {
+  up: TrendingUp,
+  down: TrendingDown,
+  flat: Minus,
 };
 
-const deltaArrow: Record<"up" | "down" | "flat", string> = {
-  up: "↑",
-  down: "↓",
-  flat: "→",
-};
+export function MetricCard({
+  icon,
+  label,
+  value,
+  unit,
+  delta,
+  className,
+}: MetricCardProps) {
+  const Icon = delta ? deltaIcon[delta.direction] : Minus;
 
-/**
- * Single-metric readout card, e.g. Temperature 24.5°C ↑ +0.6°C Today.
- * Used in the top strip of the dashboard.
- */
-export function MetricCard({ icon, label, value, unit, delta, className }: MetricCardProps) {
   return (
-    <GlassCard className={cn("flex flex-col gap-3 animate-canopy-rise", className)}>
-      <div className="flex items-center gap-2 text-sm text-white/56">
-        <span className="text-base leading-none">{icon}</span>
-        <span>{label}</span>
-      </div>
-
-      <div className="flex items-baseline gap-1">
-        <span className="text-3xl font-semibold tracking-tight text-white/92">{value}</span>
-        {unit && <span className="text-base text-white/40">{unit}</span>}
-      </div>
-
-      {delta && (
-        <div className={cn("flex items-center gap-1 text-xs font-medium", deltaColor[delta.direction])}>
-          <span>{deltaArrow[delta.direction]}</span>
-          <span>{delta.text}</span>
-        </div>
+    <GlassCard
+      className={cn(
+        "group relative overflow-hidden transition-all duration-500 hover:-translate-y-1",
+        className
       )}
+    >
+      {/* Background Glow */}
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-green-400/5 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+
+      {/* Top Row */}
+      <div className="relative flex items-center justify-between">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 shadow-[0_0_25px_rgba(34,197,94,.20)] transition-all duration-300 group-hover:scale-110 group-hover:bg-emerald-500/20">
+          <span className="text-3xl">{icon}</span>
+        </div>
+
+        {delta && (
+          <div className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300">
+            <Icon size={13} />
+            <span>{delta.text}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Metric */}
+      <div className="relative mt-6">
+        <p className="text-sm font-medium uppercase tracking-wider text-emerald-200/60">
+          {label}
+        </p>
+
+        <div className="mt-2 flex items-end gap-1">
+          <span className="text-4xl font-bold tracking-tight text-white">
+            {value}
+          </span>
+
+          {unit && (
+            <span className="mb-1 text-sm text-emerald-300/70">
+              {unit}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Accent */}
+      <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-emerald-500 via-green-400 to-lime-400 opacity-40 transition-opacity duration-300 group-hover:opacity-100" />
     </GlassCard>
   );
 }
