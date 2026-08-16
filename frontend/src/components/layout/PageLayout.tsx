@@ -19,7 +19,21 @@ export default function PageLayout() {
   return (
     <div className="canopy-app-bg flex min-h-screen">
       <Sidebar items={navItems} activeKey={location.pathname} onSelect={(key) => navigate(key)} />
-      <main className="flex-1 overflow-y-auto">
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <nav className="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-emerald-500/10 bg-[#06140B]/95 px-4 py-3 backdrop-blur lg:hidden">
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => navigate(item.key)}
+              className={`shrink-0 rounded-lg px-3 py-2 text-sm ${
+                location.pathname === item.key ? "bg-emerald-500/15 text-emerald-200" : "text-white/55"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
         <Outlet />
       </main>
     </div>

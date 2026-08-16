@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { getLatestSensor, getSensorHistory } from "@/services/sensorService";
-import type { SensorReading, SensorHistory } from "@/types/sensor";
+import { getDeviceStatus, getLatestSensor, getSensorHistory } from "@/services/sensorService";
+import type { DeviceStatus, SensorReading, SensorHistory } from "@/types/sensor";
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -39,6 +39,30 @@ export function useSensorHistory(): UseSensorHistoryResult {
   const { data, isLoading, error, refetch } = useQuery<SensorHistory, Error>({
     queryKey: ["sensors", "history"],
     queryFn: getSensorHistory,
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
+  });
+
+  return {
+    data,
+    loading: isLoading,
+    error: error ?? null,
+    refetch,
+  };
+}
+
+interface UseDeviceStatusResult {
+  data: DeviceStatus | undefined;
+  loading: boolean;
+  error: Error | null;
+  refetch: UseQueryResult<DeviceStatus, Error>["refetch"];
+}
+
+export function useDeviceStatus(deviceId: number): UseDeviceStatusResult {
+  const { data, isLoading, error, refetch } = useQuery<DeviceStatus, Error>({
+    queryKey: ["devices", deviceId, "status"],
+    queryFn: () => getDeviceStatus(deviceId),
     refetchInterval: POLL_INTERVAL_MS,
     refetchIntervalInBackground: true,
     staleTime: 0,

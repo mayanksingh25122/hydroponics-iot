@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.models.device import Device
 from app.models.sensor_reading import SensorReading
 from app.schema.sensor import SensorData
 
@@ -17,6 +18,12 @@ def save_sensor_data(db: Session, data: SensorData):
         )
 
         db.add(reading)
+
+        # Telemetry remains the persisted source of truth for actual pump state.
+        device = db.query(Device).filter(Device.id == data.device_id).first()
+        if device is not None:
+            device.is_online = True
+
         db.commit()
         db.refresh(reading)
 

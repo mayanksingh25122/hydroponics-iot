@@ -15,7 +15,8 @@ export type SensorNumericKey =
   | "ph"
   | "tds"
   | "ec"
-  | "water_temperature";
+  | "water_temperature"
+  | "water_level";
 
 export interface LiveChartProps {
   title: string;

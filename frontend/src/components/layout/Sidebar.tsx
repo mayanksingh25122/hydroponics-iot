@@ -22,7 +22,7 @@ export function Sidebar({ items, activeKey, onSelect, className }: SidebarProps)
   return (
     <aside
       className={cn(
-        "flex h-screen w-64 shrink-0 flex-col gap-8 border-r border-emerald-500/10 bg-gradient-to-b from-[#06140B]/90 via-[#071A0F]/90 to-[#04130A]/95 p-6 backdrop-blur-xl",
+        "hidden h-screen w-64 shrink-0 flex-col gap-8 border-r border-emerald-500/10 bg-gradient-to-b from-[#06140B]/90 via-[#071A0F]/90 to-[#04130A]/95 p-6 backdrop-blur-xl lg:flex",
         className
       )}
     >
@@ -32,8 +32,8 @@ export function Sidebar({ items, activeKey, onSelect, className }: SidebarProps)
           <span className="text-lg">🌿</span>
         </div>
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold text-white/92">Canopy</span>
-          <span className="text-xs text-emerald-300/60">Hydroponics</span>
+          <span className="text-sm font-semibold text-white/92">VERDA</span>
+          <span className="text-xs text-emerald-300/60">Farm systems</span>
         </div>
       </div>
 
@@ -76,13 +76,13 @@ export function Sidebar({ items, activeKey, onSelect, className }: SidebarProps)
         })}
       </nav>
 
-      {/* Footer status */}
+      {/* Product context; live device state is shown on the dashboard. */}
       <div className="flex items-center gap-2 rounded-xl border border-emerald-500/10 bg-white/[0.02] px-3.5 py-3 text-xs text-white/40">
         <span className="relative flex h-2 w-2">
           <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
           <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-60 animate-ping" />
         </span>
-        <span>System Online</span>
+        <span>VERDA Control</span>
       </div>
     </aside>
   );

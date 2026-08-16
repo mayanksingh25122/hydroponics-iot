@@ -12,3 +12,22 @@ export interface SensorReading {
 }
 
 export type SensorHistory = SensorReading[];
+
+export interface DeviceStatus {
+  success: true;
+  device_id: number;
+  pump: boolean;
+  manualOverride: boolean;
+  wifi: boolean;
+}
+
+export interface PumpCommandResponse {
+  success: true;
+  device_id: number;
+  pump: boolean;
+  message: string;
+}
+
+export interface PumpModeResponse extends PumpCommandResponse {
+  manualOverride: boolean;
+}

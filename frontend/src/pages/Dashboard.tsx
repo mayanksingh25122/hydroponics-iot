@@ -7,8 +7,11 @@ import { TimeframeSelector } from "../components/dashboard/TimeframeSelector";
 import { WaterTank, type WaterLevelState } from "../components/dashboard/WaterTank";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { HealthRing } from "../components/dashboard/HealthRing";
-import { useLatestSensor, useSensorHistory } from "../hooks/useSensors";
+import { PumpControl } from "../components/controls/PumpControl";
+import { DeviceOverview } from "../components/dashboard/DeviceOverview";
+import { useDeviceStatus, useLatestSensor, useSensorHistory } from "../hooks/useSensors";
 import { filterHistoryByTimeframe, type Timeframe } from "../lib/chartUtils";
+import { deviceIsOnline, isTelemetryFresh, systemHealthScore } from "../lib/deviceHealth";
 
 function formatMetric(value: number | undefined, fractionDigits = 1): string {
   return value !== undefined ? value.toFixed(fractionDigits) : "—";
@@ -62,7 +65,13 @@ function mapWaterLevel(distance: number | undefined): {
  * Does not render its own sidebar or app shell; PageLayout owns those.
  */
 export default function Dashboard() {
+  const DEVICE_ID = Number(import.meta.env.VITE_DEVICE_ID || 1);
   const { data, loading, error } = useLatestSensor();
+  const {
+    data: deviceStatus,
+    loading: deviceStatusLoading,
+    error: deviceStatusError,
+  } = useDeviceStatus(DEVICE_ID);
   const {
     data: history,
     loading: historyLoading,
@@ -71,7 +80,12 @@ export default function Dashboard() {
 
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
 
-  const waterLevel = mapWaterLevel(data?.water_level);
+  const telemetryFresh = isTelemetryFresh(data);
+  const liveData = telemetryFresh ? data : undefined;
+  const waterSensorValid = liveData !== undefined && liveData.water_level >= 0;
+  const waterLevel = mapWaterLevel(liveData?.water_level);
+  const deviceOnline = deviceIsOnline(deviceStatus, data);
+  const healthScore = systemHealthScore(deviceStatus, data);
 
   const filteredHistory = useMemo(
     () => filterHistoryByTimeframe(history ?? [], timeframe),
@@ -87,8 +101,8 @@ export default function Dashboard() {
             🌱
           </div>
           <div className="flex flex-col leading-tight">
-            <h1 className="text-xl font-semibold text-white/92">Hydroponics Platform</h1>
-            <span className="text-sm text-emerald-300/50">Real-time system monitoring</span>
+            <h1 className="text-xl font-semibold text-white/92">VERDA Farms</h1>
+            <span className="text-sm text-emerald-300/50">Live farm systems monitoring</span>
           </div>
         </div>
 
@@ -112,6 +126,13 @@ export default function Dashboard() {
         </GlassCard>
       ) : null}
 
+      {!telemetryFresh && data ? (
+        <GlassCard className="flex items-center gap-3 border-amber-500/30 bg-amber-500/10 text-amber-100">
+          <AlertTriangle size={18} />
+          <span>Device telemetry is stale. Values below are not treated as live until a new upload arrives.</span>
+        </GlassCard>
+      ) : null}
+
       {loading && !data ? (
         <GlassCard className="flex items-center justify-center gap-3 py-12 text-white/70">
           <Loader2 size={20} className="animate-spin" />
@@ -124,27 +145,27 @@ export default function Dashboard() {
             <MetricCard
               icon="🌡"
               label="Temperature"
-              value={formatMetric(data?.water_temperature)}
+              value={formatMetric(liveData?.water_temperature)}
               unit="°C"
               delta={{ direction: "flat", text: "Live" }}
             />
             <MetricCard
               icon="🧪"
               label="pH"
-              value={formatMetric(data?.ph)}
+              value={formatMetric(liveData?.ph)}
               delta={{ direction: "flat", text: "Live" }}
             />
             <MetricCard
               icon="⚡"
               label="EC"
-              value={formatMetric(data?.ec)}
-              unit="ppm"
+              value={formatMetric(liveData?.ec)}
+              unit="µS/cm"
               delta={{ direction: "flat", text: "Live" }}
             />
             <MetricCard
               icon="💧"
               label="TDS"
-              value={formatMetric(data?.tds)}
+              value={formatMetric(liveData?.tds)}
               unit="ppm"
               delta={{ direction: "flat", text: "Live" }}
             />
@@ -217,15 +238,28 @@ export default function Dashboard() {
           )}
 
           {/* Bottom row */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <WaterTank percent={waterLevel.percent} state={waterLevel.state} />
-            <GlassCard className="flex flex-wrap items-center gap-3">
-              <StatusPill label="Pump" state={data?.pump_status ? "ok" : "off"} />
-              <StatusPill label="ESP32" state="ok" />
-              <StatusPill label="WiFi" state="ok" />
-              <StatusPill label="Lights" state="warn" />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+            {waterSensorValid ? (
+              <WaterTank percent={waterLevel.percent} state={waterLevel.state} />
+            ) : (
+              <GlassCard className="flex min-h-64 items-center justify-center p-5 text-center text-sm text-white/55">
+                Water-level sensor data is unavailable. Check for fresh telemetry and ultrasonic sensor readings.
+              </GlassCard>
+            )}
+            <PumpControl
+              deviceId={DEVICE_ID}
+              status={deviceStatus}
+              loading={deviceStatusLoading}
+              error={deviceStatusError?.message}
+            />
+            <DeviceOverview deviceId={DEVICE_ID} status={deviceStatus} reading={data} />
+            <GlassCard className="flex flex-col justify-between gap-5 p-5">
+              <div className="flex flex-wrap gap-2">
+                <StatusPill label={deviceOnline ? "Device online" : "Device offline"} state={deviceOnline ? "ok" : "error"} />
+                <StatusPill label={deviceStatus?.pump ? "Pump on" : "Pump off"} state={deviceStatus?.pump ? "ok" : "off"} />
+              </div>
+              <HealthRing percent={healthScore} label="System Health" />
             </GlassCard>
-            <HealthRing percent={98} />
           </div>
         </>
       )}
