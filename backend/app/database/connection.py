@@ -16,6 +16,23 @@ from app.database.base import Base
 from app.models.device import Device
 from app.models.sensor_reading import SensorReading
 
+missing_settings = [
+    name
+    for name, value in {
+        "DATABASE_HOST": DATABASE_HOST,
+        "DATABASE_PORT": DATABASE_PORT,
+        "DATABASE_NAME": DATABASE_NAME,
+        "DATABASE_USER": DATABASE_USER,
+        "DATABASE_PASSWORD": DATABASE_PASSWORD,
+    }.items()
+    if not value
+]
+
+if missing_settings:
+    raise RuntimeError(
+        "Missing database configuration: " + ", ".join(missing_settings)
+    )
+
 # Encode password (handles @, :, /, etc.)
 password = quote_plus(DATABASE_PASSWORD)
 
