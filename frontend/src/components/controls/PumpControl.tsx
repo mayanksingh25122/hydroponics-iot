@@ -2,6 +2,7 @@ import { Loader2, Power, TriangleAlert } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../common/Button";
 import { GlassCard } from "../common/GlassCard";
+import { getApiErrorMessage } from "@/services/api";
 import { setPumpMode, setPumpState } from "@/services/sensorService";
 import type { DeviceStatus } from "@/types/sensor";
 
@@ -14,23 +15,38 @@ interface PumpControlProps {
 
 export function PumpControl({ deviceId, status, loading, error }: PumpControlProps) {
   const queryClient = useQueryClient();
-  const invalidateDeviceState = () => {
-    void queryClient.invalidateQueries({ queryKey: ["devices", deviceId, "status"] });
-    void queryClient.invalidateQueries({ queryKey: ["sensors", "latest"] });
+  const refreshDeviceState = async () => {
+    await queryClient.refetchQueries({
+      queryKey: ["devices", deviceId, "status"],
+      type: "active",
+    });
+    await queryClient.invalidateQueries({ queryKey: ["sensors", "latest"] });
   };
 
   const pumpMutation = useMutation({
     mutationFn: (state: boolean) => setPumpState(deviceId, state),
-    onSuccess: invalidateDeviceState,
+    onSuccess: refreshDeviceState,
   });
   const modeMutation = useMutation({
     mutationFn: (mode: "auto" | "manual") => setPumpMode(deviceId, mode),
-    onSuccess: invalidateDeviceState,
+    onSuccess: refreshDeviceState,
   });
 
   const pending = pumpMutation.isPending || modeMutation.isPending;
   const actionError = pumpMutation.error ?? modeMutation.error;
+  const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : undefined;
   const mode = status?.manualOverride ? "MANUAL" : "AUTO";
+  const pumpCommandDisabled = pending || status?.manualOverride === false;
+
+  const handlePumpCommand = (state: boolean) => {
+    console.info("[PUMP] Button clicked", state ? "TURN ON" : "TURN OFF");
+    pumpMutation.mutate(state);
+  };
+
+  const handleModeChange = (nextMode: "auto" | "manual") => {
+    console.info("[PUMP] Button clicked", nextMode.toUpperCase());
+    modeMutation.mutate(nextMode);
+  };
 
   return (
     <GlassCard className="space-y-4 p-5">
@@ -53,8 +69,8 @@ export function PumpControl({ deviceId, status, loading, error }: PumpControlPro
           className="flex-1"
           variant={mode === "AUTO" ? "primary" : "ghost"}
           size="sm"
-          disabled={pending || loading}
-          onClick={() => modeMutation.mutate("auto")}
+          disabled={pending}
+          onClick={() => handleModeChange("auto")}
         >
           AUTO
         </Button>
@@ -62,8 +78,8 @@ export function PumpControl({ deviceId, status, loading, error }: PumpControlPro
           className="flex-1"
           variant={mode === "MANUAL" ? "primary" : "ghost"}
           size="sm"
-          disabled={pending || loading}
-          onClick={() => modeMutation.mutate("manual")}
+          disabled={pending}
+          onClick={() => handleModeChange("manual")}
         >
           MANUAL
         </Button>
@@ -71,29 +87,32 @@ export function PumpControl({ deviceId, status, loading, error }: PumpControlPro
 
       <div className="grid grid-cols-2 gap-3">
         <Button
-          disabled={pending || loading || !status?.manualOverride}
-          onClick={() => pumpMutation.mutate(true)}
+          disabled={pumpCommandDisabled}
+          onClick={() => handlePumpCommand(true)}
         >
           {pumpMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Power size={16} />}
           TURN ON
         </Button>
         <Button
           variant="danger"
-          disabled={pending || loading || !status?.manualOverride}
-          onClick={() => pumpMutation.mutate(false)}
+          disabled={pumpCommandDisabled}
+          onClick={() => handlePumpCommand(false)}
         >
           {pumpMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Power size={16} />}
           TURN OFF
         </Button>
       </div>
 
-      {!status?.manualOverride && !loading ? (
+      {status?.manualOverride === false && !loading ? (
         <p className="text-xs text-amber-200/80">Select MANUAL before requesting pump ON or OFF. Tank-full safety remains active.</p>
       ) : null}
-      {error || actionError ? (
+      {!status && !loading ? (
+        <p className="text-xs text-amber-200/80">Device status is unavailable. Commands remain available; the ESP32 switches to MANUAL mode when it accepts a pump command.</p>
+      ) : null}
+      {error || actionErrorMessage ? (
         <p className="flex items-center gap-2 text-sm text-red-300">
           <TriangleAlert size={15} />
-          {error ?? "Unable to reach device."}
+          {actionErrorMessage ?? error}
         </p>
       ) : null}
     </GlassCard>
