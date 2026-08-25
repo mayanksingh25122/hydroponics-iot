@@ -1,7 +1,7 @@
 # VERDA Agri Tech
 
 **Brand:** VERDHA
-**Tagline:** *Technology Rooted in Nature*
+**Tagline:** *from roots too the future*
 
 ---
 
