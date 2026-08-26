@@ -30,7 +30,15 @@ if config.config_file_name is not None:
 
 # Never store the URL in alembic.ini; set it here from the app's own
 # configuration so there is exactly one source of database configuration.
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+#
+# config.set_main_option() writes into Alembic's ConfigParser-backed config,
+# which uses BasicInterpolation: any "%" in the value must be escaped as "%%"
+# or ConfigParser raises ValueError before this line even returns. A
+# URL-encoded password (e.g. containing "%40") triggers this. Escaping here
+# only affects what this ConfigParser layer stores internally — ConfigParser
+# un-escapes "%%" back to "%" on read, so the real DATABASE_URL value used
+# for the actual connection is unchanged.
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 # add your model's MetaData object here
 # for 'autogenerate' support
