@@ -1,0 +1,50 @@
+[1mdiff --git a/backend/app/database/connection.py b/backend/app/database/connection.py[m
+[1mindex 07dac97..00e65e7 100644[m
+[1m--- a/backend/app/database/connection.py[m
+[1m+++ b/backend/app/database/connection.py[m
+[36m@@ -60,6 +60,3 @@[m [mSessionLocal = sessionmaker([m
+     autoflush=False,[m
+     bind=engine,[m
+ )[m
+[31m-[m
+[31m-# Create tables (if they don't exist)[m
+[31m-Base.metadata.create_all(bind=engine)[m
+[1mdiff --git a/backend/app/main.py b/backend/app/main.py[m
+[1mindex b299c66..3232550 100644[m
+[1m--- a/backend/app/main.py[m
+[1m+++ b/backend/app/main.py[m
+[36m@@ -1,7 +1,10 @@[m
+[32m+[m[32mfrom contextlib import asynccontextmanager[m
+[32m+[m
+ from fastapi import FastAPI[m
+ from fastapi.middleware.cors import CORSMiddleware[m
+ [m
+ from app.settings import CORS_ALLOW_ORIGINS[m
+[32m+[m[32mfrom app.database.connection import Base, engine[m
+ from app.routers.sensor import router as sensor_router[m
+ from app.routers.device import router as device_router[m
+ [m
+[36m@@ -11,9 +14,22 @@[m [mcors_origins = [[m
+     if origin.strip()[m
+ ][m
+ [m
+[32m+[m
+[32m+[m[32m@asynccontextmanager[m
+[32m+[m[32masync def lifespan(app: FastAPI):[m
+[32m+[m[32m    print("Initializing database schema...")[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        Base.metadata.create_all(bind=engine)[m
+[32m+[m[32m    except Exception as exc:[m
+[32m+[m[32m        print("Database schema initialization failed:", exc)[m
+[32m+[m[32m        raise[m
+[32m+[m[32m    yield[m
+[32m+[m
+[32m+[m
+ app = FastAPI([m
+     title="Hydroponics Platform API",[m
+[31m-    version="1.0.0"[m
+[32m+[m[32m    version="1.0.0",[m
+[32m+[m[32m    lifespan=lifespan,[m
+ )[m
+ [m
+ app.add_middleware([m
