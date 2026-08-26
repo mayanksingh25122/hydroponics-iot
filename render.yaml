@@ -1,0 +1,39 @@
+# Minimal Render Blueprint for the VERDA Agri Tech FastAPI backend.
+#
+# rootDir points Render at backend/ before running buildCommand/startCommand,
+# so `app.main:app` resolves the same way it already does locally (uvicorn
+# run from the backend/ directory, matching alembic.ini's
+# `prepend_sys_path = .` assumption).
+#
+# No secret values live here. Every DATABASE_*/CORS_ALLOW_ORIGINS/
+# DEVICE_CONTROL_URLS value must be set directly in the Render dashboard
+# for this service (sync: false below means "do not store a value in this
+# file — require it to be set manually per environment").
+#
+# Alembic is intentionally NOT invoked anywhere in this file. Schema
+# migrations remain a separate, manually-run step
+# (`alembic upgrade head`, run from backend/), not part of application
+# startup or this deploy configuration.
+
+services:
+  - type: web
+    name: verda-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_HOST
+        sync: false
+      - key: DATABASE_PORT
+        sync: false
+      - key: DATABASE_NAME
+        sync: false
+      - key: DATABASE_USER
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+      - key: DEVICE_CONTROL_URLS
+        sync: false
