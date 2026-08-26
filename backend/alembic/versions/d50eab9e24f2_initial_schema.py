@@ -26,7 +26,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     op.create_table(
         "devices",
-        sa.Column("id", sa.Integer(), primary_key=True, index=True),
+        sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("device_name", sa.String(length=100), nullable=False),
         sa.Column("device_id", sa.String(length=100), nullable=False),
         sa.Column("location", sa.String(length=200), nullable=True),
@@ -38,7 +38,7 @@ def upgrade() -> None:
 
     op.create_table(
         "sensor_readings",
-        sa.Column("id", sa.Integer(), primary_key=True, index=True),
+        sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("device_id", sa.Integer(), sa.ForeignKey("devices.id"), nullable=True),
         sa.Column("ph", sa.Float(), nullable=True),
         sa.Column("tds", sa.Float(), nullable=True),
