@@ -1,14 +1,13 @@
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.settings import CORS_ALLOW_ORIGINS
 from app.routers.sensor import router as sensor_router
 from app.routers.device import router as device_router
 
 cors_origins = [
     origin.strip()
-    for origin in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173").split(",")
+    for origin in CORS_ALLOW_ORIGINS.split(",")
     if origin.strip()
 ]
 

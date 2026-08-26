@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from urllib.parse import quote_plus
 
-from app.database.config import (
+from app.settings import (
     DATABASE_HOST,
     DATABASE_PORT,
     DATABASE_NAME,
