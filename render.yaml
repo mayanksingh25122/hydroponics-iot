@@ -38,3 +38,5 @@ services:
         sync: false
       - key: DEVICE_CONTROL_URLS
         sync: false
+      - key: BACKEND_API_KEY
+        sync: false

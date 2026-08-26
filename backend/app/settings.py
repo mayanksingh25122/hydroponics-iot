@@ -43,6 +43,15 @@ if missing_settings:
         "Missing database configuration: " + ", ".join(missing_settings)
     )
 
+# --- Backend API key (required) ---------------------------------------------
+# Shared secret checked by app.routers.device's require_api_key dependency.
+# No default is provided on purpose: an unset key must fail startup, not
+# silently leave device-actuation routes unprotected.
+BACKEND_API_KEY = os.getenv("BACKEND_API_KEY")
+
+if not BACKEND_API_KEY:
+    raise RuntimeError("Missing required setting: BACKEND_API_KEY")
+
 # --- CORS configuration (optional, defaults to local dev origin) -----------
 CORS_ALLOW_ORIGINS = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173")
 
