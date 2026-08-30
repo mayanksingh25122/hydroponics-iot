@@ -1,17 +1,11 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
-from app.schema.sensor import SensorData
-from app.services.sensor_service import save_sensor_data
-
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-
-from app.database.session import get_db
-from app.schema.sensor import SensorData
-from app.services.sensor_service import save_sensor_data
 from app.models.sensor_reading import SensorReading
+from app.schema.sensor import SensorData
+from app.services.sensor_service import UnknownDeviceError, save_sensor_data
 
 router = APIRouter()
 
@@ -25,7 +19,14 @@ def receive_sensor_data(
     data: SensorData,
     db: Session = Depends(get_db)
 ):
-    reading = save_sensor_data(db, data)
+    try:
+        reading = save_sensor_data(db, data)
+    except UnknownDeviceError:
+        # Matches app.routers.device's existing error shape for consistency.
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "message": "Unknown device"},
+        )
 
     return {
         "status": "success",

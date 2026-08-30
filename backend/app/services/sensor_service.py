@@ -4,7 +4,26 @@ from app.models.sensor_reading import SensorReading
 from app.schema.sensor import SensorData
 
 
-def save_sensor_data(db: Session, data: SensorData):
+class UnknownDeviceError(Exception):
+    """Telemetry referenced a device_id with no matching row in devices.
+
+    The database already enforces this via a real foreign key
+    (sensor_readings.device_id -> devices.id). Checking it here, before
+    attempting the insert, turns what would otherwise be an unhandled
+    IntegrityError (500, no useful detail to the caller) into an expected,
+    named failure the router can translate into a clean 404.
+    """
+
+    def __init__(self, device_id: int):
+        self.device_id = device_id
+        super().__init__(f"Unknown device_id: {device_id}")
+
+
+def save_sensor_data(db: Session, data: SensorData) -> SensorReading:
+    device = db.query(Device).filter(Device.id == data.device_id).first()
+    if device is None:
+        raise UnknownDeviceError(data.device_id)
+
     try:
         reading = SensorReading(
             device_id=data.device_id,
@@ -20,9 +39,7 @@ def save_sensor_data(db: Session, data: SensorData):
         db.add(reading)
 
         # Telemetry remains the persisted source of truth for actual pump state.
-        device = db.query(Device).filter(Device.id == data.device_id).first()
-        if device is not None:
-            device.is_online = True
+        device.is_online = True
 
         db.commit()
         db.refresh(reading)
