@@ -15,6 +15,8 @@ from app.database.base import Base
 # Import models so SQLAlchemy registers them
 from app.models.device import Device
 from app.models.sensor_reading import SensorReading
+from app.models.user import User
+from app.models.auth_session import AuthSession
 
 missing_settings = [
     name
