@@ -149,6 +149,30 @@ long lastSeenPumpModeId  = -1;
 
 SemaphoreHandle_t commandMutex;
 
+// ---------------- Cross-core ACK handoff ----------------
+// Populated by processPendingCommands() (core 1) the moment a command's
+// REAL outcome is known - strictly AFTER applyPumpDecision() has already
+// run, or AFTER manualOverride has already been assigned, never before
+// (Part 2: no acknowledgement before the final result is known). Sent
+// by sendPendingAcks() (core 0, inside uploadTask, below). Cleared only
+// once the backend has actually confirmed receipt (HTTP 200) - a
+// network failure must never cause the device to forget a result it
+// already knows (Part 6), and retrying only ever re-sends this same,
+// already-computed HTTP report - it never re-runs
+// applyPumpDecision()/manualOverride, so a failed ACK can never cause a
+// duplicate physical pump action.
+struct PendingAck {
+  bool available;
+  long commandId;
+  bool appliedValue;       // pump_state: the REAL resulting pumpState (post-safety), never the raw request. pump_mode: the resulting manualOverride (always equals the request - see processPendingCommands).
+  bool wasSafetyRefused;
+};
+PendingAck ackPumpState = { false, -1, false, false };
+PendingAck ackPumpMode  = { false, -1, false, false };   // wasSafetyRefused always false - mode switching has no safety gate in this firmware
+
+void sendPendingAcks();
+void sendAckIfPending(PendingAck &ack, bool isPumpState);
+
 // ======================================================
 //                     WIFI HELPERS
 // ======================================================
@@ -247,6 +271,7 @@ void uploadTask(void *param) {
       http.end();
 
       pollCommands();
+      sendPendingAcks();
     }
     else {
       Serial.println("WiFi Disconnected!");
@@ -338,6 +363,22 @@ void handleOneCommand(JsonObject cmd) {
 
   if (commandType == "pump_state") {
     if (id == lastSeenPumpStateId) return;   // duplicate - already handled, stay quiet
+
+    // An earlier pump_state command hasn't finished its own lifecycle
+    // yet (not yet applied, or applied but its ACK hasn't been
+    // confirmed delivered) - don't accept a new one on top of it, or a
+    // still-unsent ACK could be silently overwritten and lost (Part 6/7).
+    // Deliberately does NOT update lastSeenPumpStateId, so this exact id
+    // is re-evaluated (and normally accepted) on a later poll once the
+    // outstanding one clears - which the at-least-once delivery model
+    // already guarantees will keep happening.
+    bool inFlight = false;
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      inFlight = pendingPumpState.available || ackPumpState.available;
+      xSemaphoreGive(commandMutex);
+    }
+    if (inFlight) return;
+
     lastSeenPumpStateId = id;
 
     if (!cmd["requested_pump_state"].is<bool>()) {
@@ -356,6 +397,14 @@ void handleOneCommand(JsonObject cmd) {
 
   } else if (commandType == "pump_mode") {
     if (id == lastSeenPumpModeId) return;
+
+    bool inFlight = false;
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      inFlight = pendingPumpMode.available || ackPumpMode.available;
+      xSemaphoreGive(commandMutex);
+    }
+    if (inFlight) return;
+
     lastSeenPumpModeId = id;
 
     if (!cmd["requested_manual_override"].is<bool>()) {
@@ -377,6 +426,94 @@ void handleOneCommand(JsonObject cmd) {
     Serial.print(commandType);
     Serial.println("'");
   }
+}
+
+// ======================================================
+//   COMMAND ACKNOWLEDGEMENT (core 0, called from uploadTask)
+// ======================================================
+// Reports whatever processPendingCommands() (core 1) already computed
+// and stored in ackPumpState/ackPumpMode. Never computes a result
+// itself, never touches the pump, and never retries by re-running a
+// command - only the HTTP report is retried. Backend contract
+// (backend/app/api/v1/routes/device_commands.py::acknowledge_command):
+// an identical repeat of an already-acknowledged result is a safe 200
+// no-op, so resending the exact same stored values on every call here
+// is always safe under retry.
+void sendPendingAcks() {
+  sendAckIfPending(ackPumpState, true);
+  sendAckIfPending(ackPumpMode, false);
+}
+
+void sendAckIfPending(PendingAck &ack, bool isPumpState) {
+  bool have;
+  long id;
+  bool appliedValue;
+  bool wasSafetyRefused;
+
+  if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+    have = ack.available;
+    id = ack.commandId;
+    appliedValue = ack.appliedValue;
+    wasSafetyRefused = ack.wasSafetyRefused;
+    xSemaphoreGive(commandMutex);
+  }
+
+  if (!have) return;
+
+  String json = "{";
+  json += "\"applied_pump_state\":";
+  json += isPumpState ? (appliedValue ? "true" : "false") : "null";
+  json += ",\"applied_manual_override\":";
+  json += isPumpState ? "null" : (appliedValue ? "true" : "false");
+  json += ",\"was_safety_refused\":";
+  json += wasSafetyRefused ? "true" : "false";
+  json += "}";
+
+  String url = String(commandsUrl) + "/" + String(id) + "/ack";
+
+  HTTPClient http;
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-API-Key", apiKey);
+  http.setTimeout(3000);
+
+  int code = http.POST(json);
+
+  if (code == 200) {
+    Serial.print("Command acknowledged: id=");
+    Serial.println(id);
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      ack.available = false;   // only ever cleared on confirmed backend success
+      xSemaphoreGive(commandMutex);
+    }
+  } else if (code == 401) {
+    Serial.println("Command ACK authentication failed");
+    // retained for retry - see function header
+  } else if (code == 404) {
+    Serial.print("Command ACK: command no longer exists, dropping id=");
+    Serial.println(id);
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      ack.available = false;   // nothing left to retry against
+      xSemaphoreGive(commandMutex);
+    }
+  } else if (code == 409) {
+    Serial.print("Command ACK conflict (already recorded differently), dropping id=");
+    Serial.println(id);
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      ack.available = false;   // retrying the same payload will never resolve a genuine conflict
+      xSemaphoreGive(commandMutex);
+    }
+  } else if (code > 0) {
+    Serial.print("Command ACK failed, HTTP code = ");
+    Serial.println(code);
+    // retained for retry - may be a transient server error
+  } else {
+    Serial.print("Command ACK network error: ");
+    Serial.println(http.errorToString(code));
+    // retained for retry
+  }
+
+  http.end();
 }
 
 // ======================================================
@@ -581,17 +718,21 @@ void applyPumpDecision(bool requestedOn) {
 // does autonomously afterward.
 void processPendingCommands() {
   bool haveManualOverride = false, manualOverrideValue = false;
+  long manualOverrideId = -1;
   bool havePumpState = false, pumpStateValue = false;
+  long pumpStateId = -1;
 
   if (xSemaphoreTake(commandMutex, 0) == pdTRUE) {
     if (pendingPumpMode.available) {
       haveManualOverride = true;
       manualOverrideValue = pendingPumpMode.value;
+      manualOverrideId = pendingPumpMode.id;
       pendingPumpMode.available = false;
     }
     if (pendingPumpState.available) {
       havePumpState = true;
       pumpStateValue = pendingPumpState.value;
+      pumpStateId = pendingPumpState.id;
       pendingPumpState.available = false;
     }
     xSemaphoreGive(commandMutex);
@@ -600,11 +741,39 @@ void processPendingCommands() {
   if (haveManualOverride) {
     manualOverride = manualOverrideValue;
     Serial.println(manualOverride ? "Command applied: MANUAL mode" : "Command applied: AUTO mode");
+
+    // Mode switching has no safety gate in this firmware - it always
+    // succeeds exactly as requested, so the outcome is known immediately.
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      ackPumpMode.available = true;
+      ackPumpMode.commandId = manualOverrideId;
+      ackPumpMode.appliedValue = manualOverride;
+      ackPumpMode.wasSafetyRefused = false;
+      xSemaphoreGive(commandMutex);
+    }
   }
 
   if (havePumpState) {
     applyPumpDecision(pumpStateValue);   // safety arbiter remains authoritative
+
+    // The REAL outcome, read back from pumpState after the safety
+    // arbiter has already run (Part 2/4) - never assumed from the raw
+    // request. If applyPumpDecision's A/B check (LEVEL_UNKNOWN/
+    // LEVEL_FULL) forced a different result than requested, pumpState
+    // will already reflect that here.
+    bool refused = (pumpState != pumpStateValue);
     Serial.println(pumpStateValue ? "Command applied: Pump ON" : "Command applied: Pump OFF");
+    if (refused) {
+      Serial.println("Command outcome: safety refused the requested pump state");
+    }
+
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      ackPumpState.available = true;
+      ackPumpState.commandId = pumpStateId;
+      ackPumpState.appliedValue = pumpState;   // the real resulting state, not the request
+      ackPumpState.wasSafetyRefused = refused;
+      xSemaphoreGive(commandMutex);
+    }
   }
 }
 
