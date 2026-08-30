@@ -11,7 +11,8 @@ import { PumpControl } from "../components/controls/PumpControl";
 import { DeviceOverview } from "../components/dashboard/DeviceOverview";
 import { useDeviceStatus, useLatestSensor, useSensorHistory } from "../hooks/useSensors";
 import { filterHistoryByTimeframe, type Timeframe } from "../lib/chartUtils";
-import { deviceIsOnline, isTelemetryFresh, systemHealthScore } from "../lib/deviceHealth";
+import { deviceIsOnline, hasSensorReading, isTelemetryFresh, systemHealthScore } from "../lib/deviceHealth";
+import { getApiErrorMessage } from "../services/api";
 
 function formatMetric(value: number | undefined, fractionDigits = 1): string {
   return value !== undefined ? value.toFixed(fractionDigits) : "—";
@@ -84,8 +85,17 @@ export default function Dashboard() {
   const liveData = telemetryFresh ? data : undefined;
   const waterSensorValid = liveData !== undefined && liveData.water_level >= 0;
   const waterLevel = mapWaterLevel(liveData?.water_level);
-  const deviceOnline = deviceIsOnline(deviceStatus, data);
+  const deviceOnline = deviceIsOnline(deviceStatus, data, deviceStatusError);
   const healthScore = systemHealthScore(deviceStatus, data);
+  const deviceStatusErrorMessage = deviceStatusError
+    ? getApiErrorMessage(deviceStatusError)
+    : undefined;
+
+  // GET /api/sensors/latest resolves successfully to {} (no `id`/`timestamp`)
+  // when the device has never sent a reading — distinct from a reading that
+  // arrived once and then went stale. Conflating the two would show "Device
+  // telemetry is stale" on a device that has never reported anything at all.
+  const neverReceivedTelemetry = !loading && !error && data !== undefined && !hasSensorReading(data);
 
   const filteredHistory = useMemo(
     () => filterHistoryByTimeframe(history ?? [], timeframe),
@@ -126,7 +136,12 @@ export default function Dashboard() {
         </GlassCard>
       ) : null}
 
-      {!telemetryFresh && data ? (
+      {neverReceivedTelemetry ? (
+        <GlassCard className="flex items-center gap-3 border-white/10 bg-white/[0.03] text-white/70">
+          <AlertTriangle size={18} />
+          <span>No telemetry has been received from this device yet. Readings will appear here once the ESP32 sends its first upload.</span>
+        </GlassCard>
+      ) : !telemetryFresh && hasSensorReading(data) ? (
         <GlassCard className="flex items-center gap-3 border-amber-500/30 bg-amber-500/10 text-amber-100">
           <AlertTriangle size={18} />
           <span>Device telemetry is stale. Values below are not treated as live until a new upload arrives.</span>
@@ -250,7 +265,7 @@ export default function Dashboard() {
               deviceId={DEVICE_ID}
               status={deviceStatus}
               loading={deviceStatusLoading}
-              error={deviceStatusError?.message}
+              error={deviceStatusErrorMessage}
             />
             <DeviceOverview deviceId={DEVICE_ID} status={deviceStatus} reading={data} />
             <GlassCard className="flex flex-col justify-between gap-5 p-5">
