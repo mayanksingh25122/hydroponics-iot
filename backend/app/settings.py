@@ -124,3 +124,16 @@ if SESSION_COOKIE_SAMESITE == "none" and not SESSION_COOKIE_SECURE:
 # were fresh. Override with DEVICE_COMMAND_TTL_SECONDS if a different
 # window is ever needed — no code change required.
 DEVICE_COMMAND_TTL_SECONDS = int(os.getenv("DEVICE_COMMAND_TTL_SECONDS", "90"))
+
+# --- Device online/offline threshold (optional) ------------------------------
+# How recent Device.last_seen_at must be for app.routers.device to consider
+# the device currently online. last_seen_at is refreshed by any real inbound
+# contact from the device (telemetry POST, command poll, command ack), each
+# on the same ~5s cycle as the frontend's own telemetry-freshness threshold
+# (frontend/src/lib/deviceHealth.ts, TELEMETRY_STALE_AFTER_MS = 20s). 30s
+# here is slightly more generous, since last_seen_at now reflects more than
+# just telemetry — a device that only just polled for commands, without a
+# telemetry POST landing at the exact same instant, should not read as
+# offline. Override with DEVICE_ONLINE_TIMEOUT_SECONDS if a different
+# window is ever needed — no code change required.
+DEVICE_ONLINE_TIMEOUT_SECONDS = int(os.getenv("DEVICE_ONLINE_TIMEOUT_SECONDS", "30"))

@@ -368,3 +368,36 @@ def touch_device_last_seen(db: Session, device_id: int) -> None:
         {"last_seen_at": datetime.now(timezone.utc)}, synchronize_session=False
     )
     db.commit()
+
+
+# =============================================================================
+# Reading the latest command (for status display)
+# =============================================================================
+
+
+def get_latest_acknowledged_command(
+    db: Session, device_id: int, command_type: str
+) -> DeviceCommand | None:
+    """The most recently acknowledged command of this type for this
+    device, or None if there isn't one yet.
+
+    Deliberately only ever returns an ACKNOWLEDGED command — a still-
+    pending or delivered command represents a request that hasn't been
+    confirmed carried out, and presenting its requested_* values as
+    though they were the device's current, actual state would be
+    exactly the "claims applied when it might not be" problem this
+    project's command architecture exists to avoid. Callers wanting
+    confirmed device state (e.g. app.routers.device's status route)
+    should read applied_pump_state / applied_manual_override /
+    was_safety_refused from the result, never requested_*.
+    """
+    return (
+        db.query(DeviceCommand)
+        .filter(
+            DeviceCommand.device_id == device_id,
+            DeviceCommand.command_type == command_type,
+            DeviceCommand.status == "acknowledged",
+        )
+        .order_by(DeviceCommand.acknowledged_at.desc())
+        .first()
+    )
