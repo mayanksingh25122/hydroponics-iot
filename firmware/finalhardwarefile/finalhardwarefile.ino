@@ -14,6 +14,12 @@ const char* ssid       = "mayank";
 const char* password   = "";
 const char* serverUrl = "http://10.51.96.87:8000/sensor-data";
 
+// Device credential for the backend's require_device_api_key dependency
+// (backend/app/routers/sensor.py) - must match that server's
+// BACKEND_API_KEY exactly, or every upload is rejected with 401.
+// Replace this placeholder before flashing; never commit the real value.
+const char* apiKey = "REPLACE_WITH_BACKEND_API_KEY";
+
 const unsigned long UPLOAD_INTERVAL = 5000;   // ms between HTTP uploads (runs on core 0)
 
 // ---------------- Debug ----------------
@@ -151,6 +157,7 @@ void uploadTask(void *param) {
 
       http.begin(serverUrl);
       http.addHeader("Content-Type", "application/json");
+      http.addHeader("X-API-Key", apiKey);
       http.setTimeout(3000);
 
       String json = "{";
@@ -172,7 +179,11 @@ void uploadTask(void *param) {
       Serial.print("HTTP Code = ");
       Serial.println(code);
 
-      if (code > 0) {
+      if (code == 200) {
+        Serial.println("Telemetry uploaded successfully");
+      } else if (code == 401) {
+        Serial.println("Telemetry rejected: authentication failed");
+      } else if (code > 0) {
         Serial.println("Server Response:");
         Serial.println(http.getString());
       } else {
