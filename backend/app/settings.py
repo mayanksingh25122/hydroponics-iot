@@ -28,29 +28,34 @@ DATABASE_NAME = os.getenv("DATABASE_NAME")
 DATABASE_USER = os.getenv("DATABASE_USER")
 DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD")
 
-_REQUIRED_DATABASE_SETTINGS = {
-    "DATABASE_HOST": DATABASE_HOST,
-    "DATABASE_PORT": DATABASE_PORT,
-    "DATABASE_NAME": DATABASE_NAME,
-    "DATABASE_USER": DATABASE_USER,
-    "DATABASE_PASSWORD": DATABASE_PASSWORD,
-}
-
-missing_settings = [name for name, value in _REQUIRED_DATABASE_SETTINGS.items() if not value]
-
-if missing_settings:
-    raise RuntimeError(
-        "Missing database configuration: " + ", ".join(missing_settings)
-    )
-
 # --- Backend API key (required) ---------------------------------------------
 # Shared secret checked by app.routers.device's require_api_key dependency.
 # No default is provided on purpose: an unset key must fail startup, not
 # silently leave device-actuation routes unprotected.
 BACKEND_API_KEY = os.getenv("BACKEND_API_KEY")
 
-if not BACKEND_API_KEY:
-    raise RuntimeError("Missing required setting: BACKEND_API_KEY")
+# Every setting the backend cannot run without, validated in one pass. Reported
+# together rather than one-per-restart: a developer with an empty .env should
+# learn the whole list from a single failed start, not discover it one variable
+# at a time. Raising conditions are unchanged — any missing value still aborts
+# startup, and no setting has gained a default.
+_REQUIRED_SETTINGS = {
+    "DATABASE_HOST": DATABASE_HOST,
+    "DATABASE_PORT": DATABASE_PORT,
+    "DATABASE_NAME": DATABASE_NAME,
+    "DATABASE_USER": DATABASE_USER,
+    "DATABASE_PASSWORD": DATABASE_PASSWORD,
+    "BACKEND_API_KEY": BACKEND_API_KEY,
+}
+
+missing_settings = [name for name, value in _REQUIRED_SETTINGS.items() if not value]
+
+if missing_settings:
+    raise RuntimeError(
+        "Missing required configuration: "
+        + ", ".join(missing_settings)
+        + ". Set these in backend/.env (see backend/.env.example)."
+    )
 
 # --- CORS configuration (optional, defaults to local dev origin) -----------
 CORS_ALLOW_ORIGINS = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173")
