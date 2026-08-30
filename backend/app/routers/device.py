@@ -1,26 +1,14 @@
-import secrets
-
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.api.v1.routes.auth import get_current_user
 from app.database.session import get_db
 from app.models.device import Device
 from app.schema.device import PumpCommand, PumpModeCommand
 from app.services.device_service import DeviceCommunicationError, request_device_json
-from app.settings import BACKEND_API_KEY
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
-
-
-def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
-    """Protects device-actuation routes only. Missing/incorrect key -> 401.
-
-    Uses secrets.compare_digest for a constant-time comparison; never
-    includes the expected key in the response or in any log output.
-    """
-    if x_api_key is None or not secrets.compare_digest(x_api_key, BACKEND_API_KEY):
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 def _device_or_error(device_id: int, db: Session) -> Device | None:
@@ -51,7 +39,7 @@ def get_device_status(device_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/{device_id}/pump", dependencies=[Depends(require_api_key)])
+@router.post("/{device_id}/pump", dependencies=[Depends(get_current_user)])
 def set_pump(device_id: int, command: PumpCommand, db: Session = Depends(get_db)):
     device = _device_or_error(device_id, db)
     if device is None:
@@ -73,7 +61,7 @@ def set_pump(device_id: int, command: PumpCommand, db: Session = Depends(get_db)
     }
 
 
-@router.post("/{device_id}/pump/mode", dependencies=[Depends(require_api_key)])
+@router.post("/{device_id}/pump/mode", dependencies=[Depends(get_current_user)])
 def set_pump_mode(device_id: int, command: PumpModeCommand, db: Session = Depends(get_db)):
     device = _device_or_error(device_id, db)
     if device is None:

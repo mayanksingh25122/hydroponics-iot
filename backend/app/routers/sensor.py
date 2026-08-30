@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+import secrets
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -6,15 +8,35 @@ from app.database.session import get_db
 from app.models.sensor_reading import SensorReading
 from app.schema.sensor import SensorData
 from app.services.sensor_service import UnknownDeviceError, save_sensor_data
+from app.settings import BACKEND_API_KEY
 
 router = APIRouter()
+
+
+def require_device_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
+    """Authenticates the ESP32 itself to the backend for telemetry
+    ingestion. Missing/incorrect key -> 401.
+
+    This is the device's own credential — generated and known only to
+    the backend and the physical ESP32, never sent to or stored by the
+    frontend. Moved here from app.routers.device (where it was
+    previously, incorrectly, applied to browser-facing pump-control
+    routes that the frontend could never actually satisfy, since it
+    never sent this header). Those routes now use the session-cookie
+    based get_current_user instead — see app.routers.device.
+
+    Uses secrets.compare_digest for a constant-time comparison; never
+    includes the expected key in the response or in any log output.
+    """
+    if x_api_key is None or not secrets.compare_digest(x_api_key, BACKEND_API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 # ============================================
 # ESP32 Upload Endpoint
 # ============================================
 
-@router.post("/sensor-data")
+@router.post("/sensor-data", dependencies=[Depends(require_device_api_key)])
 def receive_sensor_data(
     data: SensorData,
     db: Session = Depends(get_db)
