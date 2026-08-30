@@ -18,10 +18,16 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# allow_credentials=True is required for the browser to send the
+# verda_session httpOnly cookie (app.api.v1.routes.auth) on
+# cross-origin requests — e.g. frontend on :5173, backend on :8000.
+# This is only safe because allow_origins is always an explicit list
+# from CORS_ALLOW_ORIGINS, never "*" — the CORS spec (and browsers)
+# reject wildcard origins combined with credentials.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

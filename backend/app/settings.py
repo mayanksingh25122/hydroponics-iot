@@ -74,3 +74,42 @@ DEVICE_CONTROL_URLS = os.getenv("DEVICE_CONTROL_URLS", "{}")
 # production if a shorter or longer window is ever needed — no code change
 # required.
 SESSION_TTL_DAYS = int(os.getenv("SESSION_TTL_DAYS", "7"))
+
+# --- Session cookie configuration (optional, dev-safe defaults) -------------
+# Every default below is chosen to work correctly against a plain-HTTP local
+# dev setup (frontend on http://localhost:5173, backend on
+# http://localhost:8000 — different origins, same "site") without any .env
+# changes, while remaining fully overridable for a real HTTPS deployment.
+#
+# SESSION_COOKIE_SECURE defaults to false because local dev is plain HTTP —
+# a Secure cookie is never sent by the browser over HTTP, so this MUST be
+# set to true in production (over HTTPS), or login would appear to work
+# but no cookie would ever actually be stored.
+SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "verda_session")
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() == "true"
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "lax").strip().lower()
+SESSION_COOKIE_PATH = os.getenv("SESSION_COOKIE_PATH", "/")
+
+# Deliberately unset (host-only cookie) by default rather than defaulting to
+# "localhost" — an explicit Domain=localhost is unnecessary for same-site
+# localhost development and only invites cross-port leakage; set
+# SESSION_COOKIE_DOMAIN explicitly (e.g. ".verda.io") only once frontend and
+# backend share a real parent domain in production.
+SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN") or None
+
+_VALID_SAMESITE_VALUES = {"lax", "strict", "none"}
+if SESSION_COOKIE_SAMESITE not in _VALID_SAMESITE_VALUES:
+    raise RuntimeError(
+        "Invalid SESSION_COOKIE_SAMESITE: "
+        + repr(SESSION_COOKIE_SAMESITE)
+        + ". Must be one of: lax, strict, none."
+    )
+
+if SESSION_COOKIE_SAMESITE == "none" and not SESSION_COOKIE_SECURE:
+    # Browsers reject SameSite=None cookies that aren't also Secure — this
+    # combination would silently fail to set the cookie at all, which is a
+    # confusing way to discover a misconfiguration. Fail loudly instead.
+    raise RuntimeError(
+        "SESSION_COOKIE_SAMESITE=none requires SESSION_COOKIE_SECURE=true "
+        "(browsers reject non-Secure SameSite=None cookies)."
+    )
