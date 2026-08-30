@@ -1,47 +1,212 @@
-/* Canopy — Emerald Glass design tokens
-   Source: Hydroponics Platform Design System v1.0 */
+/* ============================================================
+   VERDA Design Foundation
+   Source: VERDA Frontend Blueprint (logo-derived palette, rev 3)
 
-:root {
-  /* Brand */
-  --canopy-primary: #10B981;      /* Emerald */
-  --canopy-secondary: #84CC16;    /* Lime */
-  --canopy-accent: #34D399;       /* Mint */
+   This file is the canonical, single source of truth for every
+   VERDA design token. It is imported once, at the top of
+   src/index.css.
 
-  /* Surface */
-  --canopy-bg: #0B0F0D;           /* Dark Forest */
-  --canopy-bg-elevated: #10151280;
+   Scope note (Task 10): this is an ADDITIVE token layer. Nothing
+   here modifies, removes, or overrides the existing Canopy/shadcn
+   tokens defined further down in index.css (--background,
+   --canopy-primary, .canopy-app-bg, etc.) — those still drive every
+   currently-shipped page unchanged. New primitives under
+   src/components/ui/ and src/components/brand/ consume ONLY the
+   --color-verda-*, --radius-verda-*, and --text-verda-* tokens below.
+   Existing pages adopt them in a later task, not this one.
 
-  /* Glass */
-  --canopy-glass-bg: rgba(255, 255, 255, 0.06);
-  --canopy-glass-bg-hover: rgba(255, 255, 255, 0.09);
-  --canopy-glass-border: rgba(255, 255, 255, 0.12);
-  --canopy-glass-blur: 20px;
-  --canopy-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  --canopy-radius: 24px;
-  --canopy-radius-sm: 14px;
+   Note: Tailwind v4 requires @theme blocks to contain only custom
+   property declarations (no comments) — this header, and the
+   section notes below, document the block from outside it.
 
-  /* Text */
-  --canopy-text-primary: rgba(255, 255, 255, 0.92);
-  --canopy-text-secondary: rgba(255, 255, 255, 0.56);
-  --canopy-text-muted: rgba(255, 255, 255, 0.36);
+   Surfaces & ground: canvas is sampled directly from the VERDA logo
+   background. Ink is charcoal carrying the wordmark's green
+   undertone, never neutral grey. Brand greens are sampled from the
+   mark itself (forest-800 is the wordmark green; trace-600 is the
+   circuit-trace green, reserved for interactive/success state so
+   identity and "healthy" don't collapse into one meaning). Radius
+   ceilings at 10px — no consumer-app rounding. Elevation tokens are
+   for overlays only; static panels carry no shadow. Typography
+   tokens are size/line-height pairs only — weight and letter-
+   spacing use Tailwind's stock font-weight and tracking utilities.
+   --font-verda-mono is a system stack (no new font dependency);
+   Geist Mono remains an explicitly-deferred future addition.
+   Breakpoints are additive and do not touch Tailwind's default
+   sm/md/lg/xl/2xl scale used elsewhere in the app.
 
-  /* Status */
-  --canopy-status-ok: #34D399;
-  --canopy-status-warn: #FACC15;
-  --canopy-status-error: #F87171;
-  --canopy-status-off: rgba(255, 255, 255, 0.24);
+   --animate-verda-breathe hardcodes 3.2s rather than referencing
+   --verda-motion-breath below, because @theme values are emitted
+   as-is into generated utility CSS and keeping the single real
+   duration value inline avoids an extra indirection for one usage.
+   If --verda-motion-breath ever changes, update this value too.
+   ============================================================ */
 
-  /* Motion */
-  --canopy-ease: cubic-bezier(0.22, 1, 0.36, 1);
+@theme {
+  --color-verda-canvas: #f0f2ee;
+  --color-verda-surface: #ffffff;
+  --color-verda-surface-2: #e7ebe7;
+  --color-verda-sage: #d6e4da;
+  --color-verda-sage-wash: #f2f6f3;
+
+  --color-verda-ink: #12211a;
+  --color-verda-ink-2: #47594f;
+  --color-verda-ink-3: #6f8479;
+
+  --color-verda-forest-900: #0c3524;
+  --color-verda-forest-800: #134a33;
+  --color-verda-forest-700: #1a5c40;
+  --color-verda-trace-600: #237a52;
+  --color-verda-leaf-500: #2f9463;
+  --color-verda-leaf-400: #57b383;
+  --color-verda-mint-300: #8fd4ac;
+  --color-verda-mint-100: #d6e9dd;
+
+  --color-verda-ok: #237a52;
+  --color-verda-warn: #b0741c;
+  --color-verda-danger: #a63a2b;
+  --color-verda-info: #2c6480;
+  --color-verda-idle: #7b8d83;
+
+  --color-verda-data-water: #2c6480;
+  --color-verda-data-temp: #b0603c;
+  --color-verda-data-ph: #6e5a87;
+  --color-verda-data-ec: #2f9463;
+  --color-verda-data-tds: #b0741c;
+
+  --color-verda-line-subtle: #e6ebe6;
+  --color-verda-line: #dde3dd;
+  --color-verda-line-strong: #c6d0c7;
+
+  --radius-verda-sm: 5px;
+  --radius-verda-md: 8px;
+  --radius-verda-lg: 10px;
+
+  --shadow-verda-1: 0 1px 2px rgb(18 33 26 / 0.04), 0 4px 12px rgb(18 33 26 / 0.06);
+  --shadow-verda-2: 0 8px 32px rgb(18 33 26 / 0.12);
+
+  --ease-verda: cubic-bezier(0.33, 1, 0.68, 1);
+
+  --animate-verda-breathe: verda-breathe 3.2s ease-in-out infinite;
+
+  @keyframes verda-breathe {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  --text-verda-display: 2.75rem;
+  --text-verda-display--line-height: 1.05;
+
+  --text-verda-h1: 1.75rem;
+  --text-verda-h1--line-height: 1.2;
+
+  --text-verda-h2: 1.25rem;
+  --text-verda-h2--line-height: 1.4;
+
+  --text-verda-h3: 0.9375rem;
+  --text-verda-h3--line-height: 1.4;
+
+  --text-verda-body: 0.875rem;
+  --text-verda-body--line-height: 1.57;
+
+  --text-verda-label: 0.6875rem;
+  --text-verda-label--line-height: 1.5;
+
+  --text-verda-caption: 0.75rem;
+  --text-verda-caption--line-height: 1.5;
+
+  --text-verda-metric-lg: 1.875rem;
+  --text-verda-metric-lg--line-height: 1;
+
+  --text-verda-metric-xl: 2.75rem;
+  --text-verda-metric-xl--line-height: 1;
+
+  --text-verda-mono: 0.75rem;
+  --text-verda-mono--line-height: 1.5;
+
+  --font-verda-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --breakpoint-tablet: 768px;
+  --breakpoint-laptop: 1024px;
+  --breakpoint-desktop: 1200px;
+  --breakpoint-wide: 1440px;
 }
 
-/* Ambient background: dark forest gradient + faint radial glow,
-   used on the html/body of pages that host Canopy screens */
-.canopy-app-bg {
-  background:
-    radial-gradient(60% 50% at 15% 0%, rgba(16, 185, 129, 0.10) 0%, transparent 60%),
-    radial-gradient(50% 40% at 100% 100%, rgba(132, 204, 22, 0.06) 0%, transparent 60%),
-    var(--canopy-bg);
-  min-height: 100vh;
-  color: var(--canopy-text-primary);
+/* ============================================================
+   Plain reference tokens — raw values, not registered with
+   Tailwind's @theme (so they generate no utility classes). These
+   are consumed via var() in component styles / inline style props,
+   e.g. transitionDuration: "var(--verda-motion-base)".
+
+   fast (150ms): hover color/border/background
+   base (260ms): disclosure, tab change, panel state
+   slow (420ms): panel/drawer/modal entrance
+   data (800ms): value interpolation between polls
+   stagger (40ms): per-panel stagger on first paint
+   breath (3.2s): live-status pulse
+   ============================================================ */
+:root {
+  --verda-motion-fast: 150ms;
+  --verda-motion-base: 260ms;
+  --verda-motion-slow: 420ms;
+  --verda-motion-data: 800ms;
+  --verda-motion-stagger: 40ms;
+  --verda-motion-breath: 3.2s;
+
+  --verda-focus-ring: var(--color-verda-trace-600);
+}
+
+/* ============================================================
+   Dark variant — VERDA tokens only. Independent of the existing
+   .dark class, which still governs the current Canopy theme.
+   Three-state pattern: unstamped root follows the OS; an explicit
+   data-theme attribute overrides it either direction.
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-verda-canvas: #0b1712;
+    --color-verda-surface: #122019;
+    --color-verda-surface-2: #182920;
+    --color-verda-sage: #1f352a;
+    --color-verda-sage-wash: #152119;
+
+    --color-verda-ink: #e9efea;
+    --color-verda-ink-2: #a6b5ab;
+    --color-verda-ink-3: #78877e;
+
+    --color-verda-trace-600: #8fd4ac;
+    --color-verda-leaf-500: #6bbe91;
+
+    --color-verda-line-subtle: #1c2a22;
+    --color-verda-line: #23352b;
+    --color-verda-line-strong: #31463a;
+
+    --verda-focus-ring: var(--color-verda-trace-600);
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-verda-canvas: #0b1712;
+  --color-verda-surface: #122019;
+  --color-verda-surface-2: #182920;
+  --color-verda-sage: #1f352a;
+  --color-verda-sage-wash: #152119;
+
+  --color-verda-ink: #e9efea;
+  --color-verda-ink-2: #a6b5ab;
+  --color-verda-ink-3: #78877e;
+
+  --color-verda-trace-600: #8fd4ac;
+  --color-verda-leaf-500: #6bbe91;
+
+  --color-verda-line-subtle: #1c2a22;
+  --color-verda-line: #23352b;
+  --color-verda-line-strong: #31463a;
+
+  --verda-focus-ring: var(--color-verda-trace-600);
 }

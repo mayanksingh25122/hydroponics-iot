@@ -1,8 +1,12 @@
 @import "tw-animate-css";
 @import "@fontsource-variable/geist";
 @import "tailwindcss";
+@import "./styles/tokens.css";
 
-/* Dark mode styling is handled via the .dark theme tokens below. */
+/* Dark mode styling is handled via the .dark theme tokens below.
+   VERDA's own tokens (--color-verda-*, etc.) live in ./styles/tokens.css
+   and are independent of the .dark class / Canopy tokens below —
+   see that file's header comment for the adoption boundary. */
 
 /* Canopy — Emerald Glass keyframes (referenced via --animate-* below) */
 @keyframes canopy-rise {
@@ -181,6 +185,28 @@
 
   html {
     font-family: var(--font-sans);
+  }
+
+  /* VERDA accessibility foundation. Global and permanent, not tied
+     to any page redesign: :focus-visible only fires for keyboard
+     focus, so this has no visual effect on pointer interaction. */
+  :focus-visible {
+    outline: 2px solid var(--verda-focus-ring, var(--color-verda-trace-600));
+    outline-offset: 2px;
+  }
+}
+
+/* Respect the OS-level reduced-motion preference everywhere, not
+   only in new VERDA components — this only ever reduces motion, so
+   it changes nothing for users who haven't requested it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
