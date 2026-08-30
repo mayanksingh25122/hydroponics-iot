@@ -401,3 +401,21 @@ def get_latest_acknowledged_command(
         .order_by(DeviceCommand.acknowledged_at.desc())
         .first()
     )
+
+
+def get_command_for_device(db: Session, command_id: int, device_id: int) -> DeviceCommand | None:
+    """A single command, scoped to a specific device.
+
+    Returns None both when no command with this id exists at all AND
+    when it exists but belongs to a different device — deliberately the
+    same one outcome for both cases, so a caller (the user-facing
+    command-status route) can return one generic "not found" without
+    ever confirming or denying that a command id belongs to some other
+    device. Same reasoning as the identical-404 rule already used by the
+    device's own ack endpoint (app.api.v1.routes.device_commands).
+    """
+    return (
+        db.query(DeviceCommand)
+        .filter(DeviceCommand.id == command_id, DeviceCommand.device_id == device_id)
+        .first()
+    )

@@ -9,7 +9,14 @@ from app.database.session import get_db
 from app.models.device import Device
 from app.models.sensor_reading import SensorReading
 from app.models.user import User
-from app.schema.device import PumpCommand, PumpModeCommand, QueuedCommandResponse
+from app.schema.device import (
+    CommandResult,
+    CommandStatusResponse,
+    PumpCommand,
+    PumpModeCommand,
+    QueuedCommandResponse,
+    RequestedCommandState,
+)
 from app.services import command_service
 from app.settings import DEVICE_ONLINE_TIMEOUT_SECONDS
 
@@ -94,6 +101,66 @@ def get_device_status(device_id: int, db: Session = Depends(get_db)):
         "manualOverride": manual_override,
         "wifi": _is_device_online(device),
     }
+
+
+def _to_command_status_response(command) -> CommandStatusResponse:
+    result = None
+    if command.status == "acknowledged":
+        result = CommandResult(
+            pump_state=command.applied_pump_state,
+            manual_override=command.applied_manual_override,
+            was_safety_refused=command.was_safety_refused,
+        )
+
+    return CommandStatusResponse(
+        success=True,
+        command_id=command.id,
+        device_id=command.device_id,
+        command_type=command.command_type,
+        status=command.status,
+        requested=RequestedCommandState(
+            pump_state=command.requested_pump_state,
+            manual_override=command.requested_manual_override,
+        ),
+        result=result,
+        created_at=command.created_at,
+        delivered_at=command.delivered_at,
+        acknowledged_at=command.acknowledged_at,
+        expires_at=command.expires_at,
+    )
+
+
+@router.get(
+    "/{device_id}/commands/{command_id}",
+    response_model=CommandStatusResponse,
+    dependencies=[Depends(get_current_user)],
+)
+def get_command_status(device_id: int, command_id: int, db: Session = Depends(get_db)):
+    """Lets the authenticated user who queued a command (or any
+    authenticated user — this project has no per-user device-ownership
+    model, matching every other route in this file) check its lifecycle
+    and, once acknowledged, what actually happened. Read-only: never
+    creates, mutates, or transitions a command's state.
+
+    A command that doesn't exist and a command that exists but belongs
+    to a different device are both reported as the identical "Unknown
+    command" 404 (command_service.get_command_for_device) — a command id
+    belonging to another device must never be distinguishable from one
+    that doesn't exist at all.
+
+    result stays null for pending/delivered/superseded/expired — see
+    CommandStatusResponse's docstring for why "acknowledged" is treated
+    as the one moment an actual outcome exists to report at all.
+    """
+    device = _device_or_error(device_id, db)
+    if device is None:
+        return _error("Unknown device", 404)
+
+    command = command_service.get_command_for_device(db, command_id, device_id)
+    if command is None:
+        return _error("Unknown command", 404)
+
+    return _to_command_status_response(command)
 
 
 @router.post("/{device_id}/pump", response_model=QueuedCommandResponse)
