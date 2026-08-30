@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -21,6 +22,18 @@ const char* serverUrl = "http://10.51.96.87:8000/sensor-data";
 const char* apiKey = "REPLACE_WITH_BACKEND_API_KEY";
 
 const unsigned long UPLOAD_INTERVAL = 5000;   // ms between HTTP uploads (runs on core 0)
+
+// GET .../commands - same host/device as serverUrl above, same apiKey.
+// See backend/app/api/v1/routes/device_commands.py::poll_commands.
+const char* commandsUrl = "http://10.51.96.87:8000/api/v1/devices/1/commands";
+
+// millis()-gated, independent of UPLOAD_INTERVAL above (checked once per
+// uploadTask iteration; that loop's own 5s vTaskDelay currently bounds
+// the realized polling rate to at most once per ~5s regardless of this
+// value - kept as its own named constant so it documents intent and
+// stays correct if the upload cadence is ever changed independently).
+unsigned long lastCommandPoll = 0;
+const unsigned long COMMAND_POLL_INTERVAL = 3000;   // ms between GET .../commands polls
 
 // ---------------- Debug ----------------
 #define DEBUG_SERIAL 1   // set to 0 to silence printSerial() and speed up loop further
@@ -88,6 +101,13 @@ bool manualOverride = false;
 // or assign pumpState.
 void applyPumpDecision(bool requestedOn);
 
+// Command polling (core 0, inside uploadTask) and reception (core 1,
+// inside loop()) - forward-declared for the same reason as above.
+void pollCommands();
+void handleCommandResponse(const String &body);
+void handleOneCommand(JsonObject cmd);
+void processPendingCommands();
+
 // ---------------- Cross-core snapshot for HTTP upload task ----------------
 struct SensorSnapshot {
   float ph, tds, ec, temp, dist;
@@ -95,6 +115,39 @@ struct SensorSnapshot {
 };
 SensorSnapshot snapshot;
 SemaphoreHandle_t dataMutex;
+
+// ---------------- Cross-core command handoff ----------------
+// Mirrors the pattern above in the opposite direction: core 0
+// (pollCommands/handleCommandResponse, below) discovers and STRICTLY
+// VALIDATES a backend command, then only ever stores it here - it never
+// calls applyPumpDecision() or touches manualOverride itself. Core 1
+// (processPendingCommands(), called from loop()) is the only code that
+// drains these and acts on them, exclusively through the existing
+// safety-arbited control path. pump_state and pump_mode are independent
+// command types on the backend (each supersedes only its own kind), so
+// they get two separate slots/ids here rather than one shared struct -
+// a pending command of one kind is never blocked or overwritten by the
+// other.
+struct PendingBoolCommand {
+  bool available;
+  long id;
+  bool value;
+};
+PendingBoolCommand pendingPumpState = { false, -1, false };
+PendingBoolCommand pendingPumpMode  = { false, -1, false };   // value = requested manualOverride
+
+// Duplicate-command protection (Part 10): the backend keeps returning an
+// active (pending/delivered) command on every poll until it is
+// acknowledged - which this task deliberately does not implement yet
+// (see poll_commands' docstring). Without this, the same already-seen
+// command would be re-validated, re-stored, and re-logged every single
+// polling cycle. Read/written only by core 0 (pollCommands's call
+// chain), so no mutex is needed for these two - they're never touched
+// from core 1.
+long lastSeenPumpStateId = -1;
+long lastSeenPumpModeId  = -1;
+
+SemaphoreHandle_t commandMutex;
 
 // ======================================================
 //                     WIFI HELPERS
@@ -192,6 +245,8 @@ void uploadTask(void *param) {
       }
 
       http.end();
+
+      pollCommands();
     }
     else {
       Serial.println("WiFi Disconnected!");
@@ -201,6 +256,129 @@ void uploadTask(void *param) {
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
 }
+
+// ======================================================
+//   COMMAND POLLING (core 0, called from uploadTask above)
+// ======================================================
+// GET .../commands, validate the response strictly, and hand any
+// accepted command off to processPendingCommands() (core 1, loop()) via
+// the pendingPumpState/pendingPumpMode structs above. This function
+// itself never calls applyPumpDecision() and never touches
+// manualOverride/PUMP_PIN - see the "Cross-core command handoff" note.
+void pollCommands() {
+  unsigned long now = millis();
+  if (now - lastCommandPoll < COMMAND_POLL_INTERVAL) {
+    return;
+  }
+  lastCommandPoll = now;
+
+  HTTPClient http;
+  http.begin(commandsUrl);
+  http.addHeader("X-API-Key", apiKey);
+  http.setTimeout(3000);
+
+  int code = http.GET();
+
+  if (code == 200) {
+    handleCommandResponse(http.getString());
+  } else if (code == 401) {
+    Serial.println("Command polling authentication failed");
+  } else if (code > 0) {
+    Serial.print("Command polling failed, HTTP code = ");
+    Serial.println(code);
+  } else {
+    Serial.print("Command polling error: ");
+    Serial.println(http.errorToString(code));
+  }
+
+  http.end();
+}
+
+// Parses {"commands":[...]} and validates each entry. An empty array is
+// the normal "nothing pending" case and is deliberately not logged -
+// see Part 13/Part 5.A of this task.
+void handleCommandResponse(const String &body) {
+  DynamicJsonDocument doc(1024);
+  DeserializationError err = deserializeJson(doc, body);
+
+  if (err) {
+    Serial.print("Command polling: malformed JSON (");
+    Serial.print(err.c_str());
+    Serial.println(")");
+    return;
+  }
+
+  JsonArray commands = doc["commands"].as<JsonArray>();
+  if (commands.isNull()) {
+    Serial.println("Command polling: malformed response (missing commands array)");
+    return;
+  }
+
+  for (JsonVariant v : commands) {
+    handleOneCommand(v.as<JsonObject>());
+  }
+}
+
+// Strict per-command validation (Part 6). Any check that fails rejects
+// just this one command safely - it never reaches
+// pendingPumpState/pendingPumpMode, so it can never influence the pump.
+void handleOneCommand(JsonObject cmd) {
+  if (!cmd["id"].is<long>()) {
+    Serial.println("Command rejected: missing/invalid id");
+    return;
+  }
+  long id = cmd["id"];
+
+  const char* type = cmd["command_type"].as<const char*>();
+  if (type == nullptr) {
+    Serial.println("Command rejected: missing command_type");
+    return;
+  }
+  String commandType(type);
+
+  if (commandType == "pump_state") {
+    if (id == lastSeenPumpStateId) return;   // duplicate - already handled, stay quiet
+    lastSeenPumpStateId = id;
+
+    if (!cmd["requested_pump_state"].is<bool>()) {
+      Serial.println("Command rejected: invalid payload for pump_state");
+      return;
+    }
+    bool value = cmd["requested_pump_state"].as<bool>();
+
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      pendingPumpState.available = true;
+      pendingPumpState.id = id;
+      pendingPumpState.value = value;
+      xSemaphoreGive(commandMutex);
+    }
+    Serial.println("Command received: pump_state");
+
+  } else if (commandType == "pump_mode") {
+    if (id == lastSeenPumpModeId) return;
+    lastSeenPumpModeId = id;
+
+    if (!cmd["requested_manual_override"].is<bool>()) {
+      Serial.println("Command rejected: invalid payload for pump_mode");
+      return;
+    }
+    bool value = cmd["requested_manual_override"].as<bool>();
+
+    if (xSemaphoreTake(commandMutex, portMAX_DELAY) == pdTRUE) {
+      pendingPumpMode.available = true;
+      pendingPumpMode.id = id;
+      pendingPumpMode.value = value;
+      xSemaphoreGive(commandMutex);
+    }
+    Serial.println("Command received: pump_mode");
+
+  } else {
+    Serial.print("Command rejected: unknown type '");
+    Serial.print(commandType);
+    Serial.println("'");
+  }
+}
+
 // ======================================================
 //                  SERIAL COMMANDS
 // ======================================================
@@ -265,6 +443,7 @@ void setup()
   connectWiFi();
 
   dataMutex = xSemaphoreCreateMutex();
+  commandMutex = xSemaphoreCreateMutex();
   xTaskCreatePinnedToCore(
     uploadTask,     // task function
     "uploadTask",   // name
@@ -340,6 +519,93 @@ void applyPumpDecision(bool requestedOn) {
 
   pumpState = allowedOn;
   digitalWrite(PUMP_PIN, allowedOn ? HIGH : LOW);
+}
+
+// ======================================================
+//   COMMAND RECEPTION (core 1, called every loop() pass)
+// ======================================================
+// Drains whatever pollCommands() (core 0) validated and stored, and
+// routes it through the EXISTING control architecture only:
+//   - a pump_state command calls applyPumpDecision() - the single
+//     authoritative pump writer above, whose A/B safety checks
+//     (LEVEL_UNKNOWN / LEVEL_FULL -> force OFF) still run unconditionally
+//     and are NOT bypassed or duplicated here.
+//   - a pump_mode command only ever assigns manualOverride, exactly
+//     like the PUMP_AUTO serial command already does.
+// Never calls digitalWrite(PUMP_PIN, ...) directly. manualOverride is
+// applied first so that if both arrive in the same cycle, the pump_state
+// command takes effect under the mode that was just requested, matching
+// how a human issuing the same two actions in order would expect it to
+// behave. That internal ordering has no effect on the OUTCOME of the
+// applyPumpDecision() call this tick either way, though - it consults
+// only waterLevel, never manualOverride.
+//
+// REMOTE pump_state SEMANTICS (backend/app/routers/device.py::set_pump
+// queues this unconditionally - no manualOverride check exists there,
+// and the frontend's own MANUAL-mode gating is a UI convenience, not an
+// enforced contract - see B6-8.1's report). A remote pump_state command
+// is therefore an unconditional "set the output now" request, safety-
+// gated exactly like a serial PUMP_ON/PUMP_OFF, but - unlike the serial
+// handler - it never itself changes manualOverride. Full effect matrix
+// for a remote ON, by current (mode, waterLevel) at the moment it's
+// applied:
+//   waterLevel == LEVEL_UNKNOWN or LEVEL_FULL (either mode):
+//       applyPumpDecision's A/B check forces it back OFF immediately;
+//       updateWaterLevelAndPump's own next tick reinforces OFF the same
+//       way it already does for any other pump-on attempt. Safety wins
+//       regardless of mode - Part 3's precedence holds.
+//   AUTO + LEVEL_EMPTY:      turns ON; AUTO's own next-tick decision
+//                            independently wants ON too - no conflict.
+//   MANUAL + LEVEL_EMPTY:    turns ON; MANUAL leaves it exactly as set.
+//   AUTO + LEVEL_NORMAL:     turns ON; AUTO's hysteresis only ever HOLDS
+//                            the current state in NORMAL, never actively
+//                            turns it back off - so it stays ON despite
+//                            manualOverride still reading false, until
+//                            the level changes or another command
+//                            arrives. This is a real, deterministic
+//                            consequence of hysteresis being passive,
+//                            not a bug.
+//   MANUAL + LEVEL_NORMAL:   turns ON; MANUAL leaves it exactly as set
+//                            (same observable outcome as the AUTO case
+//                            above, reached for a different reason).
+// A remote OFF is symmetric and always safe (OFF never conflicts with
+// A/B safety), with one asymmetry worth naming: AUTO + LEVEL_EMPTY will
+// have AUTO's own next tick immediately turn it back ON again, since
+// AUTO actively wants ON in EMPTY (unlike NORMAL's passive hysteresis).
+// A remote OFF sent without first switching to MANUAL can therefore be
+// transient in that specific combination - exactly why the frontend's
+// UI steers users through MANUAL mode first, even though nothing here
+// or in the backend requires it.
+// mode (AUTO/MANUAL) has NO effect on how a fresh pump_state command
+// itself resolves in any of the above cases - only on what the system
+// does autonomously afterward.
+void processPendingCommands() {
+  bool haveManualOverride = false, manualOverrideValue = false;
+  bool havePumpState = false, pumpStateValue = false;
+
+  if (xSemaphoreTake(commandMutex, 0) == pdTRUE) {
+    if (pendingPumpMode.available) {
+      haveManualOverride = true;
+      manualOverrideValue = pendingPumpMode.value;
+      pendingPumpMode.available = false;
+    }
+    if (pendingPumpState.available) {
+      havePumpState = true;
+      pumpStateValue = pendingPumpState.value;
+      pendingPumpState.available = false;
+    }
+    xSemaphoreGive(commandMutex);
+  }
+
+  if (haveManualOverride) {
+    manualOverride = manualOverrideValue;
+    Serial.println(manualOverride ? "Command applied: MANUAL mode" : "Command applied: AUTO mode");
+  }
+
+  if (havePumpState) {
+    applyPumpDecision(pumpStateValue);   // safety arbiter remains authoritative
+    Serial.println(pumpStateValue ? "Command applied: Pump ON" : "Command applied: Pump OFF");
+  }
 }
 
 void updateWaterLevelAndPump() {
@@ -458,6 +724,7 @@ void loop()
 
   // Checked every loop pass - instant response
   handleSerialCommands();
+  processPendingCommands();   // cheap, non-blocking mutex try-take - see above
   updateBuzzer(now);
   updateTemperature(now);   // async, never blocks
 
