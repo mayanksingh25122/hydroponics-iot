@@ -71,6 +71,25 @@ class CommandDeviceMismatchError(Exception):
         )
 
 
+class CommandAlreadyAcknowledgedError(Exception):
+    """The command was already acknowledged, and the newly-reported
+    result does NOT match what's already stored.
+
+    A device may legitimately retry the same acknowledgement (unreliable
+    WiFi resending a request whose response was lost) — that case is a
+    safe no-op, not this exception; see acknowledge_command's docstring.
+    This is raised only when the *reported result itself differs* from
+    the one already on record, which must never silently overwrite
+    history.
+    """
+
+    def __init__(self, command_id: int):
+        self.command_id = command_id
+        super().__init__(
+            f"Command {command_id} was already acknowledged with a different result"
+        )
+
+
 # =============================================================================
 # Command creation (+ superseding)
 # =============================================================================
@@ -284,6 +303,16 @@ def acknowledge_command(
     it: raises CommandDeviceMismatchError if device_id doesn't match
     the command's own device_id, rather than silently accepting or
     rewriting ownership.
+
+    Idempotent under retry: unreliable WiFi means the ESP32 may send the
+    same acknowledgement more than once if it never saw the response to
+    the first attempt. If the command is already acknowledged and the
+    newly-reported result is IDENTICAL to what's stored, this is a safe
+    no-op — acknowledged_at is not touched again, and the existing row
+    is returned as-is. If the newly-reported result DIFFERS from what's
+    stored, raises CommandAlreadyAcknowledgedError rather than silently
+    overwriting a historical record — that would let a stale/confused
+    retry corrupt what actually happened.
     """
     command = db.query(DeviceCommand).filter(DeviceCommand.id == command_id).first()
     if command is None:
@@ -291,6 +320,15 @@ def acknowledge_command(
 
     if command.device_id != device_id:
         raise CommandDeviceMismatchError(command_id, command.device_id, device_id)
+
+    if command.status == "acknowledged":
+        if (
+            command.applied_pump_state == applied_pump_state
+            and command.applied_manual_override == applied_manual_override
+            and command.was_safety_refused == was_safety_refused
+        ):
+            return command  # identical retry - safe no-op, nothing rewritten
+        raise CommandAlreadyAcknowledgedError(command_id)
 
     command.status = "acknowledged"
     command.acknowledged_at = datetime.now(timezone.utc)
