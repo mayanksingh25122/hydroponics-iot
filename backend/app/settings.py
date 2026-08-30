@@ -64,3 +64,13 @@ CORS_ALLOW_ORIGINS = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173")
 # Kept as a raw string so app.services.device_service can continue parsing
 # it lazily, per request, exactly as it does today.
 DEVICE_CONTROL_URLS = os.getenv("DEVICE_CONTROL_URLS", "{}")
+
+# --- Session configuration (optional) ---------------------------------------
+# How long a login session (app.models.auth_session.AuthSession) stays valid
+# before requiring a fresh login. 7 days is the default: long enough that a
+# small, trusted internal team isn't re-authenticating daily, short enough
+# that a leaked/stolen session token eventually stops working on its own
+# even if nobody notices and revokes it. Override with SESSION_TTL_DAYS in
+# production if a shorter or longer window is ever needed — no code change
+# required.
+SESSION_TTL_DAYS = int(os.getenv("SESSION_TTL_DAYS", "7"))
