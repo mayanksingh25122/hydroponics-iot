@@ -113,3 +113,14 @@ if SESSION_COOKIE_SAMESITE == "none" and not SESSION_COOKIE_SECURE:
         "SESSION_COOKIE_SAMESITE=none requires SESSION_COOKIE_SECURE=true "
         "(browsers reject non-Secure SameSite=None cookies)."
     )
+
+# --- Device command queue configuration (optional) --------------------------
+# How long a queued command (app.models.device_command.DeviceCommand) stays
+# eligible for delivery before app.services.command_service considers it
+# stale. The ESP32 polls for pending commands on its existing ~5s telemetry
+# upload cycle, so 90s is generous enough to survive a couple of missed
+# cycles from a brief network blip, while still short enough that a command
+# issued while the device was offline never fires minutes later as if it
+# were fresh. Override with DEVICE_COMMAND_TTL_SECONDS if a different
+# window is ever needed — no code change required.
+DEVICE_COMMAND_TTL_SECONDS = int(os.getenv("DEVICE_COMMAND_TTL_SECONDS", "90"))

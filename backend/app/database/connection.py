@@ -17,6 +17,7 @@ from app.models.device import Device
 from app.models.sensor_reading import SensorReading
 from app.models.user import User
 from app.models.auth_session import AuthSession
+from app.models.device_command import DeviceCommand
 
 missing_settings = [
     name

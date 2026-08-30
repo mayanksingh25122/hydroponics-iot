@@ -47,3 +47,11 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    # No cascade here, unlike sessions: a DeviceCommand is a historical
+    # audit record ("this user asked for this"), worth preserving even
+    # if the user account is later removed — see DeviceCommand's own
+    # docstring. requested_by_user_id has no ON DELETE CASCADE either,
+    # so deleting a user with existing command rows is left to the
+    # database's default RESTRICT behavior.
+    requested_commands = relationship("DeviceCommand", back_populates="requested_by")
