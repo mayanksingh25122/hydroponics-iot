@@ -1,5 +1,6 @@
 import { api, getApiUrl } from "./api";
 import type {
+  CommandStatusResponse,
   DeviceStatus,
   PumpCommandResponse,
   PumpModeResponse,
@@ -19,6 +20,16 @@ export async function getSensorHistory(): Promise<SensorHistory> {
 
 export async function getDeviceStatus(deviceId: number): Promise<DeviceStatus> {
   const response = await api.get<DeviceStatus>(`/api/devices/${deviceId}/status`);
+  return response.data;
+}
+
+export async function getCommandStatus(
+  deviceId: number,
+  commandId: number
+): Promise<CommandStatusResponse> {
+  const response = await api.get<CommandStatusResponse>(
+    `/api/devices/${deviceId}/commands/${commandId}`
+  );
   return response.data;
 }
 

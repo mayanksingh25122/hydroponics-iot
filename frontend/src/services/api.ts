@@ -32,3 +32,20 @@ export function getApiErrorMessage(error: unknown): string {
 
   return error instanceof Error ? error.message : "Unable to reach device.";
 }
+
+/**
+ * Error text for a background poll (e.g. command-status tracking), as
+ * opposed to a user-initiated request. When the backend actually
+ * responded (401, 404, ...) its own message is trustworthy and
+ * specific, so it's shown as-is via getApiErrorMessage — same as any
+ * other request. When there was no response at all (network drop,
+ * timeout), the raw axios/browser message ("Network Error") is not
+ * fit for a background status line, so it's replaced with one honest,
+ * generic sentence instead.
+ */
+export function describePollError(error: unknown): string {
+  if (axios.isAxiosError(error) && error.response) {
+    return getApiErrorMessage(error);
+  }
+  return "Command status is temporarily unavailable.";
+}

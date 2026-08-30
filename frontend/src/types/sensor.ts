@@ -38,3 +38,45 @@ export interface PumpCommandResponse {
 }
 
 export type PumpModeResponse = PumpCommandResponse;
+
+export type CommandType = "pump_state" | "pump_mode";
+
+export type CommandLifecycleStatus = "pending" | "delivered" | "acknowledged" | "superseded" | "expired";
+
+/** What the user asked for. Exactly one field is non-null, matching command_type. */
+export interface RequestedCommandState {
+  pump_state: boolean | null;
+  manual_override: boolean | null;
+}
+
+/**
+ * What the ESP32 reported actually happened. Present only once a command
+ * is acknowledged — see CommandStatusResponse.result.
+ */
+export interface CommandResult {
+  pump_state: boolean | null;
+  manual_override: boolean | null;
+  was_safety_refused: boolean | null;
+}
+
+/**
+ * GET /api/devices/{id}/commands/{command_id}. result is null for every
+ * non-acknowledged status — there is no outcome to report yet. Once
+ * acknowledged, result reflects firmware's authoritative applied state,
+ * which may differ from `requested` (e.g. a safety refusal); callers
+ * must compare the two rather than assuming status === "acknowledged"
+ * means the request was honored as-is.
+ */
+export interface CommandStatusResponse {
+  success: true;
+  command_id: number;
+  device_id: number;
+  command_type: CommandType;
+  status: CommandLifecycleStatus;
+  requested: RequestedCommandState;
+  result: CommandResult | null;
+  created_at: string;
+  delivered_at: string | null;
+  acknowledged_at: string | null;
+  expires_at: string;
+}
