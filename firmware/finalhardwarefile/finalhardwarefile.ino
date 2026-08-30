@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -13,7 +14,48 @@
 // ---------------- WiFi / Server ----------------
 const char* ssid       = "mayank";
 const char* password   = "";
-const char* serverUrl = "http://10.51.96.87:8000/sensor-data";
+
+// ---------------- Environment: development vs production transport ----------------
+// ONE flag controls both which backend host this firmware targets AND
+// which transport it uses to reach it - mirrors this file's existing
+// DEBUG_SERIAL 0/1 toggle style below, for the same reason (immediately
+// obvious which mode is active from a single grep, no risk of two
+// contradictory flags being set at once).
+//
+//   1 = PRODUCTION MODE. HTTPS only, via WiFiClientSecure with
+//       setCACert(ROOT_CA_CERT) - certificate validation enabled,
+//       ZERO setInsecure(). Requires backendHost below (in the #if
+//       branch for this mode) to be set to the real deployed backend
+//       hostname before flashing (see B7's readiness audit: no
+//       production hostname exists yet, so the placeholder there will
+//       not resolve/connect until replaced).
+//   0 = DEVELOPMENT MODE. Plain HTTP, no TLS client at all - not "HTTPS
+//       with validation skipped", there is no TLS layer here to bypass,
+//       so setInsecure() is neither used nor needed. Intended ONLY for
+//       a trusted local/LAN test backend (backendHost below, in the
+//       #else branch for this mode) during hardware bring-up/testing -
+//       never point this mode at a backend reachable outside a trusted
+//       local network. Existing backend authentication (X-API-Key)
+//       still applies in both modes.
+#define VERDA_USE_TLS 0
+
+#if VERDA_USE_TLS
+// NO scheme, NO trailing slash, NO path - just host[:port].
+const char* backendHost = "REPLACE_WITH_YOUR_PRODUCTION_HOSTNAME";
+const char* backendScheme = "https://";
+#else
+const char* backendHost = "10.51.96.87:8000";
+const char* backendScheme = "http://";
+#endif
+
+// Every backend URL is derived from backendHost/backendScheme above, so
+// there is exactly one place (the #if block) to update per mode instead
+// of several that could drift out of sync. This part is identical
+// regardless of VERDA_USE_TLS - only the scheme/host selection above
+// differs between modes, everything else about how these URLs are used
+// is shared, unconditional code (see the three request sites below).
+const String serverUrl   = String(backendScheme) + String(backendHost) + "/sensor-data";
+const String commandsUrl = String(backendScheme) + String(backendHost) + "/api/v1/devices/1/commands";
 
 // Device credential for the backend's require_device_api_key dependency
 // (backend/app/routers/sensor.py) - must match that server's
@@ -23,9 +65,79 @@ const char* apiKey = "REPLACE_WITH_BACKEND_API_KEY";
 
 const unsigned long UPLOAD_INTERVAL = 5000;   // ms between HTTP uploads (runs on core 0)
 
-// GET .../commands - same host/device as serverUrl above, same apiKey.
-// See backend/app/api/v1/routes/device_commands.py::poll_commands.
-const char* commandsUrl = "http://10.51.96.87:8000/api/v1/devices/1/commands";
+// ---------------- TLS: pinned root CA (production mode only) ----------------
+// In PRODUCTION MODE (VERDA_USE_TLS 1), every backend HTTP request goes
+// through WiFiClientSecure with this root certificate (see
+// configureSecureClient() below) - never through client.setInsecure().
+// Unused in development mode, which has no TLS client at all - this
+// constant is simply not referenced by any #else branch. Deliberately
+// pins the ROOT CA that issues
+// Render's TLS certificates (Let's Encrypt), not a specific leaf/host
+// certificate: a leaf cert is host- and deployment-specific and rotates
+// on Let's Encrypt's ~90-day renewal cycle, which would silently break
+// this device every renewal until someone manually re-flashed a new
+// fingerprint. The root is stable (valid until 2035, unaffected by
+// backend redeploys or hostname changes), and validating against it
+// still cryptographically verifies the full certificate chain - this is
+// not weaker than leaf pinning, just far less operationally fragile.
+// Works for the current LAN test server's hostname above being replaced
+// with any future *.onrender.com or custom domain WITHOUT touching this
+// certificate at all, as long as that host's certificate is also issued
+// by Let's Encrypt (true for Render's automatic TLS).
+//
+// This is ISRG Root X1, Let's Encrypt's own root CA - a PUBLIC value,
+// not a secret; safe to commit. VERIFIED against the canonical source
+// (https://letsencrypt.org/certs/isrgrootx1.pem, fetched live and
+// compared byte-for-byte during B7.1.1 - the prior B7.1 version of this
+// certificate, reproduced from memory, was found to diverge from the
+// canonical source starting partway through the signature bytes and has
+// been replaced with this verified copy).
+const char* ROOT_CA_CERT = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
+WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
+ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
+MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
+h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
+0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
+T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
+B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
+B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
+KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
+OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
+jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
+qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
+rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
+hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
+ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
+3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
+NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
+ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
+TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC
+jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc
+oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq
+4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA
+mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
+emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
+-----END CERTIFICATE-----
+)EOF";
+
+#if VERDA_USE_TLS
+// Applies the pinned root CA to a freshly-constructed WiFiClientSecure,
+// right before use. Called once per HTTP request (matching the existing
+// per-call HTTPClient lifecycle below exactly, see Part 8) rather than
+// sharing one WiFiClientSecure across calls, so there is no shared TLS
+// state that could be corrupted by overlapping or back-to-back requests
+// (Part 6.6). Only exists in production mode - development mode has no
+// TLS client to configure at all.
+void configureSecureClient(WiFiClientSecure &client) {
+  client.setCACert(ROOT_CA_CERT);
+}
+#endif
 
 // millis()-gated, independent of UPLOAD_INTERVAL above (checked once per
 // uploadTask iteration; that loop's own 5s vTaskDelay currently bounds
@@ -227,12 +339,26 @@ void uploadTask(void *param) {
         xSemaphoreGive(dataMutex);
       }
 
+      // Transport selection only - everything else about this request
+      // (headers, JSON, response handling below) is identical in both
+      // modes. See "Environment: development vs production transport"
+      // above for what VERDA_USE_TLS controls.
+#if VERDA_USE_TLS
+      WiFiClientSecure client;
+      configureSecureClient(client);
       HTTPClient http;
+#else
+      HTTPClient http;
+#endif
 
       Serial.print("Connecting to: ");
       Serial.println(serverUrl);
 
+#if VERDA_USE_TLS
+      http.begin(client, serverUrl);
+#else
       http.begin(serverUrl);
+#endif
       http.addHeader("Content-Type", "application/json");
       http.addHeader("X-API-Key", apiKey);
       http.setTimeout(3000);
@@ -297,8 +423,17 @@ void pollCommands() {
   }
   lastCommandPoll = now;
 
+  // Transport selection only - see the telemetry request above for the
+  // same pattern and its explanation.
+#if VERDA_USE_TLS
+  WiFiClientSecure client;
+  configureSecureClient(client);
+  HTTPClient http;
+  http.begin(client, commandsUrl);
+#else
   HTTPClient http;
   http.begin(commandsUrl);
+#endif
   http.addHeader("X-API-Key", apiKey);
   http.setTimeout(3000);
 
@@ -469,10 +604,19 @@ void sendAckIfPending(PendingAck &ack, bool isPumpState) {
   json += wasSafetyRefused ? "true" : "false";
   json += "}";
 
-  String url = String(commandsUrl) + "/" + String(id) + "/ack";
+  String url = commandsUrl + "/" + String(id) + "/ack";
 
+  // Transport selection only - see the telemetry request above for the
+  // same pattern and its explanation.
+#if VERDA_USE_TLS
+  WiFiClientSecure client;
+  configureSecureClient(client);
+  HTTPClient http;
+  http.begin(client, url);
+#else
   HTTPClient http;
   http.begin(url);
+#endif
   http.addHeader("Content-Type", "application/json");
   http.addHeader("X-API-Key", apiKey);
   http.setTimeout(3000);
