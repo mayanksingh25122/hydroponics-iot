@@ -13,6 +13,12 @@ export const api: AxiosInstance = axios.create({
     "Content-Type": "application/json",
   },
   timeout: 10000,
+  // Required for the browser to send/receive the backend's httpOnly
+  // verda_session cookie on cross-origin requests (frontend and backend
+  // run on different ports/origins even in local dev). Backend CORS
+  // already sets allow_credentials=True with an explicit origin list
+  // (never "*") to match — see backend/app/main.py.
+  withCredentials: true,
 });
 
 export function getApiUrl(path: string): string {
