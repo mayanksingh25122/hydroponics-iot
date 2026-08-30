@@ -1,42 +1,48 @@
-import type { AuthProvider, AuthSession, AuthUser } from "./types";
+import { api } from "@/services/api";
+import type { CurrentUserResponse, LoginRequest } from "@/types/auth";
+import type { AuthProvider, AuthUser } from "./types";
 
-/**
- * Thrown by every method below until a real provider is wired.
- * Callers should catch this and show it as an honest auth-failure
- * state — never treat it as a successful sign-in.
- */
-export class AuthNotConfiguredError extends Error {
-  constructor() {
-    super("Authentication provider is not configured yet.");
-    this.name = "AuthNotConfiguredError";
-  }
+function toAuthUser(response: CurrentUserResponse): AuthUser {
+  return { id: response.id, email: response.email, isActive: response.is_active };
 }
 
 /**
- * Placeholder implementation. No credential store exists anywhere in
- * this codebase (backend/app/auth is an empty package, no Supabase
- * config is present in the frontend env) — so this provider does not
- * pretend to authenticate anyone. It never returns a session, and it
- * never persists anything.
- *
- * Task 12 scope: build the boundary, not the backend. Replace this
- * file's contents with a real provider (Supabase, a custom API
- * client, etc.) — every consumer imports `authProvider` by name, so
- * nothing outside this file needs to change.
+ * Talks to the real backend session-cookie system
+ * (app/api/v1/routes/auth.py) — no separate credential store, no
+ * tokens handled here. Every method's actual authentication proof is
+ * the httpOnly verda_session cookie the browser sends automatically
+ * via `api`'s withCredentials: true; nothing in this module ever
+ * reads, stores, or forwards that cookie's value itself.
  */
-const notConfiguredProvider: AuthProvider = {
-  async login(): Promise<AuthSession> {
-    throw new AuthNotConfiguredError();
+const realProvider: AuthProvider = {
+  async login(email, password) {
+    const payload: LoginRequest = { email, password };
+    const response = await api.post<CurrentUserResponse>("/api/v1/auth/login", payload);
+    return { user: toAuthUser(response.data) };
   },
-  async logout(): Promise<void> {
-    // No session to clear — no-op.
+
+  async logout() {
+    // Best-effort: the backend clears the cookie server-side on a
+    // successful call. If the request itself never lands (offline,
+    // dropped connection), there is no client-side cookie value to
+    // clear ourselves — httpOnly means JS can't touch it — so there is
+    // nothing more to do here. useAuthStore.logout() clears local
+    // state regardless of whether this call succeeds.
+    await api.post("/api/v1/auth/logout");
   },
-  async getSession(): Promise<AuthSession | null> {
-    return null;
-  },
-  async getCurrentUser(): Promise<AuthUser | null> {
-    return null;
+
+  async getSession() {
+    try {
+      const response = await api.get<CurrentUserResponse>("/api/v1/auth/me");
+      return { user: toAuthUser(response.data) };
+    } catch {
+      // No cookie, an expired/revoked session, or a network failure —
+      // all read as "no session" here. The backend is the sole source
+      // of truth for whether a session is valid (Part 5); this
+      // function never has a "probably still logged in" answer.
+      return null;
+    }
   },
 };
 
-export const authProvider: AuthProvider = notConfiguredProvider;
+export const authProvider: AuthProvider = realProvider;

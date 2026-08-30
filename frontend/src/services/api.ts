@@ -26,12 +26,44 @@ export function getApiUrl(path: string): string {
 }
 
 export function getApiErrorMessage(error: unknown): string {
-  if (axios.isAxiosError<{ message?: string }>(error)) {
-    return error.response?.data?.message ?? error.message;
+  if (axios.isAxiosError<{ message?: string; detail?: string }>(error)) {
+    // Two response shapes exist across this backend: most routers
+    // return a custom {success, message} JSONResponse, but
+    // app/api/v1/routes/auth.py raises FastAPI's own HTTPException,
+    // which serializes as {detail}. Both are checked so a real,
+    // specific backend message (e.g. "Invalid email or password") is
+    // shown either way, rather than falling through to axios's own
+    // generic "Request failed with status code 401".
+    return error.response?.data?.message ?? error.response?.data?.detail ?? error.message;
   }
 
   return error instanceof Error ? error.message : "Unable to reach device.";
 }
+
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+/**
+ * Registers a callback fired whenever any request through `api` gets
+ * back a 401. Lets the auth store learn its session died mid-use
+ * (expired/revoked elsewhere) without this module importing the store
+ * — that would be circular (store -> authProvider -> this module).
+ * Never navigates or mutates state itself; the caller decides what a
+ * 401 means for it.
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      unauthorizedHandler?.();
+    }
+    return Promise.reject(error);
+  }
+);
 
 /**
  * Error text for a background poll (e.g. command-status tracking), as

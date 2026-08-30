@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Divider } from "@/components/ui/Divider";
 import { useAuthStore } from "@/store/useAuthStore";
-import { AuthNotConfiguredError } from "@/lib/auth/authProvider";
+import { getApiErrorMessage } from "@/services/api";
 
 const loginSchema = z.object({
   email: z
@@ -56,11 +56,7 @@ export default function Login() {
       await login(values.email, values.password);
       navigate(redirectTo, { replace: true });
     } catch (error) {
-      setAuthError(
-        error instanceof AuthNotConfiguredError
-          ? "Sign-in isn't connected to an authentication provider yet."
-          : "We couldn't sign you in with those details. Check your email and password and try again."
-      );
+      setAuthError(getApiErrorMessage(error));
     }
   }
 
