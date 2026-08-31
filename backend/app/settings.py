@@ -117,13 +117,25 @@ if SESSION_COOKIE_SAMESITE == "none" and not SESSION_COOKIE_SECURE:
 # --- Device command queue configuration (optional) --------------------------
 # How long a queued command (app.models.device_command.DeviceCommand) stays
 # eligible for delivery before app.services.command_service considers it
-# stale. The ESP32 polls for pending commands on its existing ~5s telemetry
-# upload cycle, so 90s is generous enough to survive a couple of missed
-# cycles from a brief network blip, while still short enough that a command
-# issued while the device was offline never fires minutes later as if it
-# were fresh. Override with DEVICE_COMMAND_TTL_SECONDS if a different
-# window is ever needed — no code change required.
-DEVICE_COMMAND_TTL_SECONDS = int(os.getenv("DEVICE_COMMAND_TTL_SECONDS", "90"))
+# stale. Must comfortably exceed the firmware's own worst-case delay
+# between *receiving* a command and *applying + acknowledging* it, not
+# just its normal ~5s telemetry/poll cycle — a command that arrives while
+# firmware/finalhardwarefile/finalhardwarefile.ino's doseNutrients() is
+# mid-cycle is held (not lost — the in-flight guard preserves it) until
+# dosing finishes, because processPendingCommands() returns immediately
+# whenever dosingActive is true. Worst case there is two 15s dosing pumps
+# (MAX_PUMP_RUNTIME_MS) plus a 500ms inter-pump delay plus a 60s mix
+# (MIX_TIME_MS) plus ~100ms of chemistry reads ≈ 91s, plus up to one more
+# ~5s upload cycle (UPLOAD_INTERVAL_MS) before the resulting
+# acknowledgement is actually POSTed ≈ 96s total. 90s sat almost exactly
+# on top of that figure, leaving no margin for network jitter or a slow
+# request. 180s keeps roughly 2x headroom over the measured worst case.
+# This is a staleness cutoff, not an authorization boundary — widening it
+# does not let anyone queue a command they couldn't already queue, it only
+# lets an already-authorized one stay eligible for delivery longer.
+# Override with DEVICE_COMMAND_TTL_SECONDS if a different window is ever
+# needed — no code change required.
+DEVICE_COMMAND_TTL_SECONDS = int(os.getenv("DEVICE_COMMAND_TTL_SECONDS", "180"))
 
 # --- Device online/offline threshold (optional) ------------------------------
 # How recent Device.last_seen_at must be for app.routers.device to consider
