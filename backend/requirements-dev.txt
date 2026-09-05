@@ -1,0 +1,11 @@
+# Test-only dependencies. Deliberately NOT in requirements.txt — render.yaml's
+# buildCommand installs that file alone, so nothing here is ever shipped to or
+# installed on the production backend.
+#
+# Install locally with:
+#     pip install -r requirements.txt -r requirements-dev.txt
+#
+# httpx is required by fastapi.testclient.TestClient (Starlette's TestClient
+# is an httpx transport wrapper); it is not imported by any application code.
+pytest==9.0.2
+httpx==0.28.1

@@ -26,7 +26,7 @@ export function getApiUrl(path: string): string {
 }
 
 export function getApiErrorMessage(error: unknown): string {
-  if (axios.isAxiosError<{ message?: string; detail?: string }>(error)) {
+  if (axios.isAxiosError<{ message?: unknown; detail?: unknown }>(error)) {
     // Two response shapes exist across this backend: most routers
     // return a custom {success, message} JSONResponse, but
     // app/api/v1/routes/auth.py raises FastAPI's own HTTPException,
@@ -34,7 +34,20 @@ export function getApiErrorMessage(error: unknown): string {
     // specific backend message (e.g. "Invalid email or password") is
     // shown either way, rather than falling through to axios's own
     // generic "Request failed with status code 401".
-    return error.response?.data?.message ?? error.response?.data?.detail ?? error.message;
+    //
+    // Both are also type-checked rather than trusted, because `detail`
+    // is not always a string: a FastAPI request-validation failure
+    // (422) sets it to an array of error objects. Returning that from
+    // a function typed `: string` would put an array into React state
+    // typed string and render "[object Object]" — or throw. A 422
+    // should be unreachable while the forms mirror the backend's own
+    // rules, so the fallback below is a backstop, not a message anyone
+    // is expected to read often.
+    const { message, detail } = error.response?.data ?? {};
+    if (typeof message === "string" && message) return message;
+    if (typeof detail === "string" && detail) return detail;
+    if (error.response) return "The server rejected that request. Please check your details and try again.";
+    return error.message;
   }
 
   return error instanceof Error ? error.message : "Unable to reach device.";

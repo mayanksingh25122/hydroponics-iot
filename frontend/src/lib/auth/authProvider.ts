@@ -1,9 +1,14 @@
 import { api } from "@/services/api";
-import type { CurrentUserResponse, LoginRequest } from "@/types/auth";
+import type { CurrentUserResponse, LoginRequest, RegisterRequest } from "@/types/auth";
 import type { AuthProvider, AuthUser } from "./types";
 
 function toAuthUser(response: CurrentUserResponse): AuthUser {
-  return { id: response.id, email: response.email, isActive: response.is_active };
+  return {
+    id: response.id,
+    email: response.email,
+    isActive: response.is_active,
+    role: response.role,
+  };
 }
 
 /**
@@ -19,6 +24,19 @@ const realProvider: AuthProvider = {
     const payload: LoginRequest = { email, password };
     const response = await api.post<CurrentUserResponse>("/api/v1/auth/login", payload);
     return { user: toAuthUser(response.data) };
+  },
+
+  async register(email, password) {
+    const payload: RegisterRequest = { email, password };
+    const response = await api.post<CurrentUserResponse>(
+      "/api/v1/auth/register",
+      payload
+    );
+    // No session state is touched here, and useAuthStore is never
+    // involved: the backend issues no cookie for this call, so the
+    // visitor is exactly as unauthenticated after registering as
+    // before. The caller sends them to /login.
+    return toAuthUser(response.data);
   },
 
   async logout() {

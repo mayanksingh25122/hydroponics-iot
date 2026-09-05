@@ -1,7 +1,16 @@
+import type { UserRole } from "@/types/auth";
+
 export interface AuthUser {
   id: number;
   email: string;
   isActive: boolean;
+  /**
+   * VIEWER / OPERATOR / ADMIN — see types/auth.ts::UserRole. UX only:
+   * every route this drives a decision for (hiding pump controls,
+   * gating /admin/users) is independently enforced by the backend's
+   * require_role dependency, which does not trust or read this value.
+   */
+  role: UserRole;
 }
 
 export interface AuthSession {
@@ -22,6 +31,15 @@ export interface AuthSession {
  */
 export interface AuthProvider {
   login(email: string, password: string): Promise<AuthSession>;
+  /**
+   * Creates an account. Returns an AuthUser, NOT an AuthSession —
+   * registering does not sign anyone in, and the backend sets no
+   * cookie on this call. The returned user's isActive is false and
+   * role is "viewer": a self-registered account waits for an admin's
+   * approval (which is what actually assigns viewer or operator)
+   * before it can log in at all.
+   */
+  register(email: string, password: string): Promise<AuthUser>;
   logout(): Promise<void>;
   /** The currently authenticated session, or null if there isn't one — asks the backend, never trusts local state. */
   getSession(): Promise<AuthSession | null>;

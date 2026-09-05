@@ -7,6 +7,7 @@ import {
   Workflow,
   Sparkles,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -15,6 +16,14 @@ export interface NavItem {
   /** Real route path. Undefined = not yet built — rendered disabled, not a dead link. */
   path?: string;
   icon: LucideIcon;
+  /**
+   * UX-only visibility hint: VerdaSidebar hides this item for anyone
+   * whose role isn't "admin". Not a security boundary — the item's
+   * own route is separately guarded by RequireAdmin, and its backend
+   * calls by require_role(ADMIN); hiding a link here just avoids
+   * showing a non-admin a path they can't use.
+   */
+  adminOnly?: boolean;
 }
 
 export interface NavSection {
@@ -51,7 +60,10 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: "System",
-    items: [{ label: "Settings", path: "/settings", icon: Settings }],
+    items: [
+      { label: "Settings", path: "/settings", icon: Settings },
+      { label: "Approve Users", path: "/admin/users", icon: ShieldCheck, adminOnly: true },
+    ],
   },
 ];
 

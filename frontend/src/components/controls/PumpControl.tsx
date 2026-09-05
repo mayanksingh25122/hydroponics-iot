@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Loader2, Power, TriangleAlert } from "lucide-react";
+import { Loader2, Lock, Power, TriangleAlert } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../common/Button";
 import { GlassCard } from "../common/GlassCard";
@@ -10,6 +10,7 @@ import { useCommandTracker } from "@/hooks/useCommandTracker";
 import { commandOutcomeBadgeTone, commandOutcomeMessage } from "@/lib/commandLifecycle";
 import type { CommandOutcome } from "@/lib/commandLifecycle";
 import type { DeviceStatus } from "@/types/sensor";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface PumpControlProps {
   deviceId: number;
@@ -38,6 +39,14 @@ function CommandStatusLine({ outcome, requestLabel, commandType }: {
 
 export function PumpControl({ deviceId, status, loading, error }: PumpControlProps) {
   const queryClient = useQueryClient();
+  const role = useAuthStore((state) => state.user?.role);
+  // UX only — hides/disables controls a VIEWER has no use for. The
+  // real boundary is the backend's require_role(OPERATOR, ADMIN) on
+  // POST /api/devices/{id}/pump and .../pump/mode
+  // (app/routers/device.py): a VIEWER whose request somehow reached
+  // the API regardless (a stale tab, a modified client) is refused
+  // there with a 403, independent of anything rendered here.
+  const canControlHardware = role === "operator" || role === "admin";
 
   const pumpTracker = useCommandTracker(deviceId, "pump_state");
   const modeTracker = useCommandTracker(deviceId, "pump_mode");
@@ -77,8 +86,9 @@ export function PumpControl({ deviceId, status, loading, error }: PumpControlPro
   // Pump-state and pump-mode disablement are deliberately independent
   // (Part 7): sending a mode change must never lock out the ON/OFF
   // buttons, and vice versa.
-  const pumpCommandDisabled = pumpMutation.isPending || status?.manualOverride === false;
-  const modeCommandDisabled = modeMutation.isPending;
+  const pumpCommandDisabled =
+    !canControlHardware || pumpMutation.isPending || status?.manualOverride === false;
+  const modeCommandDisabled = !canControlHardware || modeMutation.isPending;
 
   const pumpErrorMessage = pumpMutation.error ? getApiErrorMessage(pumpMutation.error) : undefined;
   const modeErrorMessage = modeMutation.error ? getApiErrorMessage(modeMutation.error) : undefined;
@@ -151,7 +161,13 @@ export function PumpControl({ deviceId, status, loading, error }: PumpControlPro
         ) : null}
       </div>
 
-      {status?.manualOverride === false && !loading ? (
+      {!canControlHardware ? (
+        <p className="flex items-center gap-2 text-xs text-amber-200/80">
+          <Lock size={13} aria-hidden="true" />
+          Pump control requires Operator permissions. Ask an admin to grant you Operator access.
+        </p>
+      ) : null}
+      {canControlHardware && status?.manualOverride === false && !loading ? (
         <p className="text-xs text-amber-200/80">Select MANUAL before requesting pump ON or OFF. Tank-full safety remains active.</p>
       ) : null}
       {!status && !loading ? (

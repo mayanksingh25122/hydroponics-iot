@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.v1.routes.auth import get_current_user
+from app.api.v1.routes.auth import get_current_user, require_role
 from app.database.session import get_db
 from app.models.device import Device
 from app.models.sensor_reading import SensorReading
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schema.device import (
     CommandResult,
     CommandStatusResponse,
@@ -168,15 +168,22 @@ def set_pump(
     device_id: int,
     command: PumpCommand,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role(UserRole.OPERATOR, UserRole.ADMIN)),
 ):
     """Queues a pump on/off request — does NOT contact the ESP32.
-    Authentication is unchanged: get_current_user (session cookie),
-    same as before this task. The device applies the command later,
-    through its own poll of GET /api/v1/devices/{id}/commands, subject
-    to firmware's own safety logic — this endpoint has no way to know
-    or claim the outcome, so it never says the pump turned on or off,
-    only that the request was accepted and queued.
+
+    Authorization: require_role(OPERATOR, ADMIN) — a VIEWER is
+    authenticated but not authorized here, and gets require_role's 403,
+    never a silent no-op or a misleading 404. This is the actual
+    security boundary; any frontend disabling of the pump controls for
+    a VIEWER is UX only and enforces nothing by itself (see
+    frontend/src/components/controls/PumpControl.tsx).
+
+    The device applies the command later, through its own poll of
+    GET /api/v1/devices/{id}/commands, subject to firmware's own safety
+    logic — this endpoint has no way to know or claim the outcome, so
+    it never says the pump turned on or off, only that the request was
+    accepted and queued.
     """
     device = _device_or_error(device_id, db)
     if device is None:
@@ -203,11 +210,11 @@ def set_pump_mode(
     device_id: int,
     command: PumpModeCommand,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role(UserRole.OPERATOR, UserRole.ADMIN)),
 ):
     """Queues an auto/manual mode request — does NOT contact the ESP32.
-    Same authentication (get_current_user) and same "queued, not
-    applied" contract as set_pump above.
+    Same authorization (require_role(OPERATOR, ADMIN)) and same
+    "queued, not applied" contract as set_pump above.
     """
     device = _device_or_error(device_id, db)
     if device is None:

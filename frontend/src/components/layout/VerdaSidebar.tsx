@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { VerdaMark } from "@/components/brand/VerdaMark";
 import { Badge } from "@/components/ui/Badge";
+import { useAuthStore } from "@/store/useAuthStore";
 import { NAV_SECTIONS } from "./navConfig";
 
 export type SidebarMode = "full" | "rail";
@@ -22,6 +23,7 @@ export interface VerdaSidebarProps {
  */
 export function VerdaSidebar({ mode = "full", className, onNavigate }: VerdaSidebarProps) {
   const rail = mode === "rail";
+  const isAdmin = useAuthStore((state) => state.user?.role === "admin");
 
   return (
     <aside
@@ -55,7 +57,9 @@ export function VerdaSidebar({ mode = "full", className, onNavigate }: VerdaSide
               </h2>
             )}
             <ul className={cn("flex flex-col", rail ? "gap-1" : "gap-0.5")}>
-              {section.items.map((item) => {
+              {section.items
+                .filter((item) => !item.adminOnly || isAdmin)
+                .map((item) => {
                 const Icon = item.icon;
                 const disabled = !item.path;
 

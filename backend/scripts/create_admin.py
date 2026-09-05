@@ -3,22 +3,37 @@
 This is a local operator script, not an HTTP endpoint — it is run manually
 by whoever already has the backend/.env database credentials, the same
 access level required to run `alembic upgrade head` or
-scripts/provision_device.py. There is no new API surface: VERDA has no
-public registration endpoint and none is added by this script.
+scripts/provision_device.py.
 
-IMPORTANT — this creates an AUTHENTICATED account, not an "admin" role:
-app.models.user.User has no role/permission column, and none is added
-here (no schema change). VERDA does not have RBAC yet — every account
-created by this script can sign in with identical access to every other
-one. This script's job is only to get the first person able to log in at
-all; authorization/roles are a separate, not-yet-built concern.
+VERDA does now have a public sign-up endpoint (POST /api/v1/auth/register),
+but it deliberately cannot replace this script: accounts created through
+it are INACTIVE and cannot log in until an operator approves them. This
+script remains the only way to create an account that can sign in
+immediately, and is still the bootstrap path for the very first one —
+there has to be someone able to log in before anyone can approve anybody.
+
+IMPORTANT — this creates a real ADMIN account, not merely an
+authenticated one: app.models.user.User has a role column
+(app.models.user.UserRole: VIEWER / OPERATOR / ADMIN), and every account
+this script creates is role=ADMIN, is_active=True, approved_at=<now>
+(self-approved at creation — there is no one else to approve it). This
+is deliberate, not a shortcut: an ADMIN can approve/disable other
+accounts and assign their roles (POST /api/v1/admin/users/{id}/approve,
+.../disable), so this script is VERDA's only bootstrap into that
+capability at all — there must be one ADMIN before anyone can be
+approved by one. Every account created this way has IDENTICAL,
+full ADMIN access to every other one; there is no lesser tier available
+through this script (an operator wanting a non-admin account for
+themselves should self-register instead and have an existing admin
+approve them as VIEWER or OPERATOR).
 
 Reuses the existing auth stack directly rather than reimplementing any
 of it:
-  - app.services.auth_service.hash_password() for Argon2id hashing —
-    the exact same function app.api.v1.routes.auth.login() calls, so a
-    user created here authenticates identically to one created any other
-    way.
+  - app.services.auth_service.create_user() writes the row — the exact
+    same function POST /api/v1/auth/register calls, which in turn uses
+    the same Argon2id hash_password() that login verifies against. A
+    user created here authenticates identically to one created any
+    other way.
   - pydantic.EmailStr for email format validation — the exact same
     mechanism app.schema.auth.LoginRequest already uses, so an email
     this script accepts is guaranteed to also be accepted at login.
@@ -47,6 +62,7 @@ import argparse
 import getpass
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -56,17 +72,18 @@ if str(BACKEND_DIR) not in sys.path:
 from pydantic import BaseModel, EmailStr, ValidationError  # noqa: E402
 
 from app.database.connection import SessionLocal  # noqa: E402
-from app.models.user import User  # noqa: E402
-from app.services.auth_service import hash_password  # noqa: E402
+from app.models.user import User, UserRole  # noqa: E402
+from app.services.auth_service import (  # noqa: E402
+    MIN_PASSWORD_LENGTH,
+    EmailAlreadyRegisteredError,
+    create_user,
+    normalize_email,
+)
 
-# Deliberately higher than LoginRequest's min_length=1 (schema/auth.py).
-# That field is permissive on purpose — login must accept whatever
-# password an account was already created with. This script is the
-# place a password is actually chosen, so it's the right place to set a
-# real floor. 12 is a plain, documented minimum for a small internal
-# team with no MFA yet, not an elaborate policy (no forced symbols,
-# digits, or rotation).
-MIN_PASSWORD_LENGTH = 12
+# MIN_PASSWORD_LENGTH and the reasoning behind the number now live in
+# app.services.auth_service, imported above rather than restated here.
+# POST /api/v1/auth/register enforces the same floor from that same
+# constant, so the two account-creation paths cannot drift apart.
 
 
 class BootstrapError(Exception):
@@ -137,29 +154,49 @@ def _read_password() -> str:
 def create_owner_account(email: str, password: str) -> User:
     """Create one User row, or raise BootstrapError if that email
     already exists. Never overwrites, never deletes, never touches
-    sessions. password is hashed via the real auth service before it
-    ever becomes a SQL bound parameter — only the Argon2id output is
-    ever sent to the database.
+    sessions.
+
+    The row itself is written by app.services.auth_service.create_user
+    — the same function POST /api/v1/auth/register calls — rather than
+    by a second copy of "check, hash, insert" living here. That is what
+    makes an operator-created account and a self-registered one
+    genuinely identical: same normalization, same Argon2id hashing,
+    same duplicate handling (pre-check plus the users.email UNIQUE
+    constraint), with only is_active/role/approved_at differing.
+
+    is_active=True, role=ADMIN, approved_at=<now> is the one deliberate
+    difference, and it is why this script still exists. Self-
+    registration through the API creates INACTIVE, VIEWER,
+    never-approved accounts precisely because a public endpoint must
+    never hand out hardware-capable access on its own — an operator
+    running this script, with direct database credentials, is the
+    trusted path, and the only path able to approve the untrusted one.
+    approved_at is set to "now" here because there is no one else to
+    approve this account; it is self-approved at the moment of creation,
+    exactly like scripts/provision_device.py bootstraps the first
+    device with no external approval step either.
     """
     db = SessionLocal()
     try:
-        existing = db.query(User).filter(User.email == email).first()
-        if existing is not None:
+        try:
+            return create_user(
+                db,
+                email,
+                password,
+                is_active=True,
+                role=UserRole.ADMIN,
+                approved_at=datetime.now(timezone.utc),
+            )
+        except EmailAlreadyRegisteredError:
+            # Re-read purely to put the existing id in the operator's
+            # message; nothing about that row is modified.
+            existing = db.query(User).filter(User.email == normalize_email(email)).first()
+            existing_id = existing.id if existing is not None else "unknown"
             raise BootstrapError(
-                f"A user already exists for {email} (id={existing.id}). "
+                f"A user already exists for {email} (id={existing_id}). "
                 "No changes were made — this script never overwrites an "
                 "existing account's password or creates a duplicate."
             )
-
-        user = User(
-            email=email,
-            password_hash=hash_password(password),
-            is_active=True,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        return user
     finally:
         db.close()
 
@@ -190,9 +227,12 @@ def main() -> int:
 
     print(f"User created successfully for {user.email} (id={user.id}).")
     print(
-        "Note: VERDA has no role/permission system yet — this is the "
-        "initial authenticated VERDA account, not an RBAC 'admin' role. "
-        "Every account created this way has identical access."
+        "This is a full ADMIN account: it can sign in immediately, and "
+        "can approve/disable other accounts and assign their roles at "
+        "POST /api/v1/admin/users/{id}/approve and .../disable. Every "
+        "account created by this script has identical, full ADMIN "
+        "access — there is no lesser tier available through this "
+        "script."
     )
     return 0
 

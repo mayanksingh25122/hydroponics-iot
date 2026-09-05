@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { Location } from "react-router-dom";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
 
 import { VerdaLockup } from "@/components/brand/VerdaLockup";
 import { VerdaMark } from "@/components/brand/VerdaMark";
@@ -48,7 +48,16 @@ export default function Login() {
     mode: "onBlur",
   });
 
-  const redirectTo = (location.state as { from?: Location } | null)?.from?.pathname ?? "/";
+  const locationState = location.state as
+    | { from?: Location; registeredEmail?: string }
+    | null;
+  const redirectTo = locationState?.from?.pathname ?? "/";
+
+  // Set by Signup.tsx on a successful registration. New accounts are
+  // created inactive (see app/api/v1/routes/auth.py::register), so this
+  // must not promise immediate access — telling someone to "sign in now"
+  // when login will refuse them is worse than saying nothing.
+  const registeredEmail = locationState?.registeredEmail;
 
   async function onSubmit(values: LoginFormValues) {
     setAuthError(null);
@@ -80,6 +89,25 @@ export default function Login() {
             <Divider className="mt-3 mb-5" />
 
             <form noValidate onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+              {registeredEmail && !authError ? (
+                <div
+                  role="status"
+                  className="flex gap-2 rounded-verda-sm border border-verda-ok/30 bg-verda-ok/5 px-3 py-2 text-verda-caption text-verda-ink-2"
+                >
+                  <CheckCircle2
+                    size={15}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    className="mt-px shrink-0 text-verda-ok"
+                  />
+                  <span>
+                    Account created for <strong className="font-medium">{registeredEmail}</strong>.
+                    A VERDA admin must approve it before you can sign in — you&apos;ll be able
+                    to log in here once they do.
+                  </span>
+                </div>
+              ) : null}
+
               {authError ? (
                 <p
                   role="alert"
@@ -164,6 +192,16 @@ export default function Login() {
               >
                 Forgot password?
               </button>
+
+              <p className="self-center text-verda-caption text-verda-ink-3">
+                Don&apos;t have an account?{" "}
+                <Link
+                  to="/signup"
+                  className="font-medium text-verda-trace-600 transition-colors duration-(--verda-motion-fast) ease-verda hover:text-verda-ink"
+                >
+                  Sign up
+                </Link>
+              </p>
             </form>
           </Panel>
         </div>
