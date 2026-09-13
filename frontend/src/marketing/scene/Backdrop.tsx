@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { BackSide, BoxGeometry, Color, MeshStandardMaterial, Object3D, ShaderMaterial } from "three";
-import type { FogExp2, InstancedMesh, Mesh, MeshBasicMaterial } from "three";
+import {
+  BackSide,
+  BoxGeometry,
+  Color,
+  InstancedBufferAttribute,
+  MeshStandardMaterial,
+  Object3D,
+  ShaderMaterial,
+} from "three";
+import type { FogExp2, InstancedMesh, Mesh, MeshBasicMaterial, WebGLProgramParametersWithUniforms } from "three";
 import { ENV_LIVING_ROOM, MAX_PROPS, sampleEnvironment } from "./environments";
+import {
+  createFloorTexture,
+  createPropAtlas,
+  createWallTexture,
+  propMaterialIndex,
+} from "./textures";
 import { useScrollStory } from "./useScrollStory";
 
 /**
@@ -129,20 +143,96 @@ export function Backdrop() {
   );
 
   const propGeometry = useMemo(() => new BoxGeometry(1, 1, 1), []);
-  const propMaterial = useMemo(
-    () => new MeshStandardMaterial({ roughness: 0.9, metalness: 0.02 }),
-    []
-  );
+
+  const floorTexture = useMemo(() => createFloorTexture(), []);
+  const wallTexture = useMemo(() => createWallTexture(), []);
+
+  /**
+   * One material for the whole furnished world, textured from a 2×2
+   * atlas. Each instance picks its tile with `aMaterial`, and the UVs
+   * are scaled by the instance's own dimensions so a 3m counter and a
+   * 20cm book have the same grain density rather than the same number
+   * of grain lines stretched across them.
+   */
+  const propMaterial = useMemo(() => {
+    const material = new MeshStandardMaterial({ roughness: 0.88, metalness: 0.03 });
+    const atlas = createPropAtlas();
+
+    material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+      shader.uniforms.uAtlas = { value: atlas };
+
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+           attribute float aMaterial;
+           varying float vMaterial;
+           varying vec2 vAtlasScale;
+           varying vec2 vPropUv;`
+        )
+        .replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+           vMaterial = aMaterial;
+           // Our own UV varying rather than three's vMapUv: that one is
+           // only declared when the material actually has a map, and
+           // this material deliberately has none — the atlas is sampled
+           // by hand so every instance can pick its own tile.
+           vPropUv = uv;
+           // Instance scale lives in the length of the matrix basis
+           // vectors. Using it as a UV repeat keeps texel density
+           // constant across wildly different prop sizes.
+           vec3 iScale = vec3(
+             length(instanceMatrix[0].xyz),
+             length(instanceMatrix[1].xyz),
+             length(instanceMatrix[2].xyz)
+           );
+           vAtlasScale = vec2(max(iScale.x, iScale.z), max(iScale.y, iScale.z)) * 1.35;`
+        );
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+           uniform sampler2D uAtlas;
+           varying float vMaterial;
+           varying vec2 vAtlasScale;
+           varying vec2 vPropUv;`
+        )
+        .replace(
+          "#include <color_fragment>",
+          `#include <color_fragment>
+           {
+             float tile = floor(vMaterial + 0.5);
+             vec2 cell = vec2(mod(tile, 2.0), floor(tile * 0.5));
+             // Inset by half a texel so a tiled lookup never bleeds
+             // into the neighbouring atlas cell.
+             vec2 local = clamp(fract(vPropUv * vAtlasScale), 0.002, 0.998);
+             vec3 grain = texture2D(uAtlas, (local + cell) * 0.5).rgb;
+             // Mid-grey is neutral: the texture only ever lightens or
+             // darkens the colour the instance already carries.
+             diffuseColor.rgb *= 0.80 + 0.40 * grain.g;
+           }`
+        );
+    };
+
+    return material;
+  }, []);
 
   // three allocates the per-instance colour buffer lazily, on the first
   // setColorAt. Seeding it here means the frame loop can assume it
-  // exists rather than branching on it every frame.
+  // exists rather than branching on it every frame. The material index
+  // attribute is attached here for the same reason.
   useEffect(() => {
     const mesh = propsRef.current;
     if (!mesh) return;
     const white = new Color(1, 1, 1);
     for (let i = 0; i < MAX_PROPS; i++) mesh.setColorAt(i, white);
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.geometry.setAttribute(
+      "aMaterial",
+      new InstancedBufferAttribute(new Float32Array(MAX_PROPS), 1)
+    );
   }, []);
 
   useFrame((state) => {
@@ -240,6 +330,13 @@ export function Backdrop() {
     if (props) {
       props.visible = built;
 
+      // Read the material buffer back off the geometry rather than
+      // closing over it: it belongs to the GPU object, not to render.
+      const materialAttribute = props.geometry.getAttribute("aMaterial") as
+        | InstancedBufferAttribute
+        | undefined;
+      const materialArray = materialAttribute?.array as Float32Array | undefined;
+
       lerpColor(scratch.propDark, from.propDark, to.propDark, mix, scratch.a, scratch.b);
       lerpColor(scratch.propLight, from.propLight, to.propLight, mix, scratch.a, scratch.b);
 
@@ -284,7 +381,16 @@ export function Backdrop() {
             .lerp(scratch.propLight, lerp(a.t ?? 0.5, b.t ?? 0.5, mix));
         }
         props.setColorAt(i, scratch.propOut);
+
+        // Material switches at the halfway point rather than blending:
+        // there is no meaningful interpolation between wood grain and
+        // brushed steel, and a hard swap under a cross-fade is invisible.
+        if (materialArray) {
+          materialArray[i] = propMaterialIndex(mix < 0.5 ? a.m : b.m);
+        }
       }
+
+      if (materialAttribute) materialAttribute.needsUpdate = true;
 
       props.instanceMatrix.needsUpdate = true;
       if (props.instanceColor) props.instanceColor.needsUpdate = true;
@@ -299,7 +405,12 @@ export function Backdrop() {
 
       <mesh name="Ground" ref={groundRef} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[30, 64]} />
-        <meshStandardMaterial color={ENV_LIVING_ROOM.ground} roughness={0.94} metalness={0} />
+        <meshStandardMaterial
+          color={ENV_LIVING_ROOM.ground}
+          map={floorTexture}
+          roughness={0.94}
+          metalness={0}
+        />
       </mesh>
 
       <mesh
@@ -311,6 +422,7 @@ export function Backdrop() {
         <planeGeometry args={[40, 14]} />
         <meshStandardMaterial
           color={ENV_LIVING_ROOM.wallColor}
+          map={wallTexture}
           roughness={0.96}
           metalness={0}
           transparent
