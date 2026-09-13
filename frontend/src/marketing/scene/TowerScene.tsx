@@ -52,7 +52,11 @@ interface CameraKey {
  * acts extend this table; the interpolation code does not change.
  */
 const CAMERA_PATH: CameraKey[] = [
-  { at: 0.0, position: [0.0, 1.15, 4.35], lookAt: [0, 0.92, 0] },
+  // Opens wider than the acts that follow. The living room is the most
+  // furnished frame on the page and the act has to establish that the
+  // tower belongs in it — which a tight crop on the tower cannot do.
+  { at: 0.0, position: [0.0, 1.34, 5.25], lookAt: [0, 0.86, 0] },
+  { at: 0.16, position: [0.0, 1.2, 4.6], lookAt: [0, 0.88, 0] },
   { at: 0.28, position: [0.0, 1.0, 3.75], lookAt: [0, 0.9, 0] },
   { at: 0.55, position: [0.35, 1.25, 4.05], lookAt: [0, 0.98, 0] },
   { at: 0.8, position: [0.0, 1.5, 4.9], lookAt: [0, 0.95, 0] },

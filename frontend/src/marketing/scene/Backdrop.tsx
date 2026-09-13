@@ -60,6 +60,8 @@ function makeScratch() {
     propDark: new Color(),
     propLight: new Color(),
     propOut: new Color(),
+    propA: new Color(),
+    propB: new Color(),
     fog: new Color(),
     a: new Color(),
     b: new Color(),
@@ -74,6 +76,24 @@ function lerpColor(out: Color, from: string, to: string, mix: number, a: Color, 
 }
 
 const lerp = (from: number, to: number, mix: number) => from + (to - from) * mix;
+
+/**
+ * Parsed colours, keyed by hex string.
+ *
+ * Props are recoloured every frame and a room can carry thirty-six of
+ * them, so parsing two hex strings per prop per frame is a few thousand
+ * string parses a second for values that never change. They are all
+ * literals in environments.ts, so one parse each is enough forever.
+ */
+const colorCache = new Map<string, Color>();
+function parsed(hex: string): Color {
+  let color = colorCache.get(hex);
+  if (!color) {
+    color = new Color(hex);
+    colorCache.set(hex, color);
+  }
+  return color;
+}
 
 export function Backdrop() {
   const skyRef = useRef<Mesh>(null);
@@ -247,9 +267,22 @@ export function Backdrop() {
         dummy.updateMatrix();
         props.setMatrixAt(i, dummy.matrix);
 
-        scratch.propOut
-          .copy(scratch.propDark)
-          .lerp(scratch.propLight, lerp(a.t ?? 0.5, b.t ?? 0.5, mix));
+        // A prop with its own colour uses it; one without takes a
+        // position on the room's two-tone ramp. A slot can change which
+        // it uses between rooms — a sage sofa becoming an untinted
+        // counter — so both ends are resolved independently and then
+        // blended, which keeps that transition continuous.
+        if (a.c || b.c) {
+          if (a.c) scratch.propA.copy(parsed(a.c));
+          else scratch.propA.copy(scratch.propDark).lerp(scratch.propLight, a.t ?? 0.5);
+          if (b.c) scratch.propB.copy(parsed(b.c));
+          else scratch.propB.copy(scratch.propDark).lerp(scratch.propLight, b.t ?? 0.5);
+          scratch.propOut.copy(scratch.propA).lerp(scratch.propB, mix);
+        } else {
+          scratch.propOut
+            .copy(scratch.propDark)
+            .lerp(scratch.propLight, lerp(a.t ?? 0.5, b.t ?? 0.5, mix));
+        }
         props.setColorAt(i, scratch.propOut);
       }
 

@@ -28,6 +28,16 @@ export interface Prop {
   r?: number;
   /** 0 = the environment's dark tone, 1 = its light tone. */
   t?: number;
+  /**
+   * Explicit colour, overriding the tone ramp.
+   *
+   * The ramp exists so a whole room can be recoloured from two values,
+   * which is right for structure — counters, benches, channel runs. It
+   * is wrong for the things that make a room feel lived in, because a
+   * rug, a sofa and a stack of books are not three values of one
+   * material. Those get a colour of their own.
+   */
+  c?: string;
 }
 
 /**
@@ -35,7 +45,7 @@ export interface Prop {
  * always morphs into prop N in the next. Raising it costs one instance
  * in a single InstancedMesh, not a draw call.
  */
-export const MAX_PROPS = 30;
+export const MAX_PROPS = 36;
 
 /** Hidden slot: below the floor at zero size, so padding never shows. */
 const EMPTY: Prop = { p: [0, -2, 0], s: [0, 0, 0] };
@@ -59,6 +69,30 @@ function row(
     r: rot,
     t: tone,
   }));
+}
+
+/**
+ * Desaturates and dims every explicitly-coloured prop in a room.
+ *
+ * Used to derive the late-evening living room from the daylit one: the
+ * furniture is not replaced, the colour is simply pulled out of it.
+ * Recognising it as the same room is the whole point of that act.
+ */
+function drain(props: Prop[], amount = 0.74, darken = 0.14): Prop[] {
+  return props.map((prop) => {
+    if (!prop.c) return prop;
+    const n = parseInt(prop.c.slice(1), 16);
+    const r = (n >> 16) & 255;
+    const g = (n >> 8) & 255;
+    const b = n & 255;
+    // Perceptual luminance, so a saturated red and a saturated blue
+    // drain to greys that still read as different values.
+    const grey = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const to = (v: number) =>
+      Math.max(0, Math.min(255, Math.round((v + (grey - v) * amount) * (1 - darken))));
+    const hex = ((to(r) << 16) | (to(g) << 8) | to(b)).toString(16).padStart(6, "0");
+    return { ...prop, c: `#${hex}` };
+  });
 }
 
 /** Pads to MAX_PROPS so every environment has the same slot count. */
@@ -119,86 +153,138 @@ export interface EnvironmentPalette {
 
 /* ============================================================
    01 — LIVING ROOM. Act 01, Arrival.
-   Pale oak, plaster, one tall window. Sofa, coffee table, floor
-   lamp, low shelf, framed art. A room someone actually lives in.
+
+   The most furnished frame on the page, and the only one allowed real
+   colour. It is the first thing a visitor sees, and the act has to
+   argue that this object belongs in a room someone actually lives in
+   — which a grey room cannot do.
+
+   Colour is warm and muted rather than bright: clay, sage, ochre,
+   walnut, brass. Saturated enough to feel like a home, restrained
+   enough that the white tower still holds the frame.
    ============================================================ */
+
+/** Muted domestic palette. Warm, low-chroma, no primaries. */
+const CLAY = "#bb9075";
+const CLAY_PALE = "#d2b39a";
+const SAGE = "#7f8f78";
+const SAGE_PALE = "#95a58d";
+const OCHRE = "#c69a58";
+const TERRACOTTA = "#b5705a";
+const WALNUT = "#7d6049";
+const WALNUT_PALE = "#9a7a5f";
+const CREAM = "#e8dfcd";
+const INK = "#33322e";
+const BRASS = "#b08d55";
+const SLATE_BLUE = "#4c6076";
+const LEAF = "#5d7a58";
+
 export const ENV_LIVING_ROOM: EnvironmentPalette = {
   name: "Living room",
   at: 0.0,
-  top: "#eceeea",
-  horizon: "#e4e8e3",
-  bottom: "#d3d8d1",
-  ground: "#ddd8cc",
-  glow: "#fffdf6",
+  top: "#efeee8",
+  horizon: "#e9e6dd",
+  bottom: "#d6cfc0",
+  ground: "#c9b79c",
+  glow: "#fffbee",
   glowDirection: [-0.75, 0.28, -0.6],
   presence: 1,
-  wallColor: "#e9ebe6",
-  wallDistance: 6.4,
-  ceilingHeight: 2.85,
-  ceilingColor: "#eef0ec",
-  windowColor: "#fffef8",
-  windowPosition: [-2.5, 1.45],
-  windowSize: [1.6, 2.5],
-  propDark: "#b9b3a6",
-  propLight: "#e2ded4",
+  wallColor: "#ebe7de",
+  wallDistance: 6.6,
+  ceilingHeight: 2.9,
+  ceilingColor: "#f0ece3",
+  windowColor: "#fffdf2",
+  windowPosition: [-2.6, 1.5],
+  windowSize: [1.7, 2.5],
+  propDark: "#a99880",
+  propLight: "#ded4c2",
   props: pad([
-    // Rug, sofa, cushions
-    { p: [-0.2, 0.006, -1.6], s: [3.6, 0.012, 2.6], t: 0.75 },
-    { p: [-2.1, 0.34, -2.2], s: [2.05, 0.68, 0.88], r: 0.06, t: 0.35 },
-    { p: [-2.1, 0.72, -2.48], s: [1.95, 0.42, 0.22], r: 0.06, t: 0.42 },
-    // Coffee table
-    { p: [-1.5, 0.19, -1.0], s: [1.1, 0.05, 0.6], t: 0.9 },
-    { p: [-1.95, 0.09, -1.0], s: [0.06, 0.19, 0.5], t: 0.2 },
-    { p: [-1.05, 0.09, -1.0], s: [0.06, 0.19, 0.5], t: 0.2 },
-    // Floor lamp
-    { p: [1.95, 0.62, -2.9], s: [0.035, 1.25, 0.035], t: 0.15 },
-    { p: [1.95, 1.32, -2.9], s: [0.34, 0.26, 0.34], t: 1 },
-    // Low shelf unit against the back wall
-    { p: [1.5, 0.31, -5.6], s: [2.6, 0.62, 0.38], t: 0.3 },
-    ...row(3, [0.85, 0.78, -5.55], [0.62, 0, 0], [0.12, 0.24, 0.1], 0.55),
-    // Framed art
-    { p: [1.1, 1.75, -6.3], s: [0.62, 0.82, 0.03], t: 0.85 },
-    { p: [1.95, 1.68, -6.3], s: [0.42, 0.56, 0.03], t: 0.7 },
-    // Side table
-    { p: [0.6, 0.26, -2.6], s: [0.44, 0.52, 0.44], t: 0.45 },
+    // --- Rug: a band of clay with a paler field inside it ---
+    { p: [0.35, 0.006, -1.5], s: [4.4, 0.012, 3.0], c: CLAY },
+    { p: [0.35, 0.01, -1.5], s: [3.7, 0.012, 2.4], c: CLAY_PALE },
+
+    // --- Sofa: base, back, two arms, two cushions, a throw ---
+    { p: [2.25, 0.28, -2.35], s: [2.15, 0.56, 0.95], r: -0.05, c: SAGE },
+    { p: [2.25, 0.63, -2.71], s: [2.15, 0.66, 0.24], r: -0.05, c: SAGE },
+    { p: [3.25, 0.44, -2.35], s: [0.22, 0.34, 0.95], r: -0.05, c: SAGE_PALE },
+    { p: [1.25, 0.44, -2.35], s: [0.22, 0.34, 0.95], r: -0.05, c: SAGE_PALE },
+    { p: [2.78, 0.68, -2.57], s: [0.42, 0.4, 0.17], r: -0.22, c: OCHRE },
+    { p: [1.76, 0.66, -2.57], s: [0.38, 0.36, 0.16], r: 0.18, c: TERRACOTTA },
+    { p: [1.34, 0.6, -2.1], s: [0.46, 0.5, 0.86], r: -0.05, c: CREAM },
+
+    // --- Coffee table with a book stack and a bowl ---
+    { p: [1.5, 0.37, -0.95], s: [1.2, 0.06, 0.66], c: WALNUT },
+    { p: [1.05, 0.18, -0.95], s: [0.06, 0.37, 0.52], c: INK },
+    { p: [1.95, 0.18, -0.95], s: [0.06, 0.37, 0.52], c: INK },
+    { p: [1.28, 0.43, -0.9], s: [0.24, 0.06, 0.18], r: 0.3, c: SLATE_BLUE },
+    { p: [1.28, 0.48, -0.9], s: [0.21, 0.04, 0.16], r: 0.12, c: CREAM },
+    { p: [1.78, 0.44, -1.02], s: [0.21, 0.09, 0.21], c: BRASS },
+
+    // --- Floor lamp ---
+    { p: [-2.55, 0.015, -3.0], s: [0.3, 0.03, 0.3], c: INK },
+    { p: [-2.55, 0.66, -3.0], s: [0.035, 1.3, 0.035], c: INK },
+    { p: [-2.55, 1.39, -3.0], s: [0.38, 0.3, 0.38], c: "#f5e9d2" },
+
+    // --- Shelf unit, books, a vase and a small brass object ---
+    { p: [1.65, 0.33, -5.9], s: [2.9, 0.66, 0.42], c: WALNUT },
+    { p: [0.62, 0.83, -5.86], s: [0.1, 0.28, 0.14], c: TERRACOTTA },
+    { p: [0.75, 0.85, -5.86], s: [0.08, 0.32, 0.14], c: SLATE_BLUE },
+    { p: [0.86, 0.81, -5.86], s: [0.09, 0.24, 0.14], c: CREAM },
+    { p: [1.0, 0.84, -5.86], s: [0.11, 0.3, 0.14], c: OCHRE },
+    { p: [2.0, 0.86, -5.86], s: [0.17, 0.34, 0.17], c: SAGE_PALE },
+    { p: [2.52, 0.76, -5.86], s: [0.15, 0.15, 0.15], c: BRASS },
+
+    // --- Framed art ---
+    { p: [1.2, 1.82, -6.5], s: [0.7, 0.9, 0.03], c: OCHRE },
+    { p: [2.12, 1.74, -6.5], s: [0.46, 0.6, 0.03], c: LEAF },
+
+    // --- Potted plant ---
+    { p: [-3.3, 0.17, -4.1], s: [0.38, 0.36, 0.38], c: TERRACOTTA },
+    { p: [-3.3, 0.78, -4.1], s: [0.72, 0.92, 0.72], c: LEAF },
+
+    // --- Side table and a mug ---
+    { p: [-1.15, 0.24, -2.5], s: [0.44, 0.48, 0.44], c: WALNUT_PALE },
+    { p: [-1.15, 0.53, -2.5], s: [0.11, 0.11, 0.11], c: "#efeae0" },
   ]),
-  fogColor: "#e6eae5",
-  fogDensity: 0.022,
-  keyColor: "#fff6e6",
-  keyIntensity: 2.6,
+  fogColor: "#e9e4d9",
+  fogDensity: 0.02,
+  keyColor: "#fff2dc",
+  keyIntensity: 2.75,
   keyPosition: [-3.4, 3.6, 2.4],
-  fillColor: "#dce6e2",
-  fillIntensity: 0.85,
+  fillColor: "#e2ded2",
+  fillIntensity: 0.9,
 };
 
 /* ============================================================
    02 — THE SAME ROOM, LATE. Act 02, The Gap.
-   Identical furniture, drained of light. The act is about systems
-   failing while nobody is watching, so the room goes quiet rather
-   than changing. Recognising it as the same room is the point.
+
+   Identical furniture in identical positions, with the colour drained
+   out of it. The act is about systems failing while nobody is
+   watching, so the room does not change — it just stops being warm.
    ============================================================ */
 export const ENV_ROOM_DUSK: EnvironmentPalette = {
   ...ENV_LIVING_ROOM,
   name: "Living room, late",
   at: 0.14,
-  top: "#d9dcda",
-  horizon: "#d2d6d3",
-  bottom: "#bcc2be",
-  ground: "#c8c4ba",
-  glow: "#e8e4d6",
+  top: "#d9dbd9",
+  horizon: "#d3d5d2",
+  bottom: "#bcbdb8",
+  ground: "#b5aa9a",
+  glow: "#e4e0d2",
   glowDirection: [-0.8, 0.16, -0.56],
-  wallColor: "#d5d8d4",
-  ceilingColor: "#d9dcd8",
-  windowColor: "#e9e6da",
-  propDark: "#9a958b",
-  propLight: "#c5c2ba",
-  fogColor: "#d2d6d2",
-  fogDensity: 0.038,
-  keyColor: "#e8e0cd",
-  keyIntensity: 1.35,
+  wallColor: "#d6d5cf",
+  ceilingColor: "#dad9d3",
+  windowColor: "#e6e2d4",
+  propDark: "#918b80",
+  propLight: "#bdb8ae",
+  props: drain(ENV_LIVING_ROOM.props),
+  fogColor: "#d3d4cf",
+  fogDensity: 0.036,
+  keyColor: "#e6ddc9",
+  keyIntensity: 1.3,
   keyPosition: [-3.6, 2.8, 1.9],
-  fillColor: "#c6cecb",
-  fillIntensity: 0.6,
+  fillColor: "#c8ccc7",
+  fillIntensity: 0.58,
 };
 
 /* ============================================================
