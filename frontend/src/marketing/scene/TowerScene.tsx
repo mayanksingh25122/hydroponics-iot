@@ -2,10 +2,10 @@ import { useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { AdaptiveDpr, Environment, Lightformer, PerformanceMonitor } from "@react-three/drei";
 import { easing } from "maath";
-import { Group, Vector3 } from "three";
-import type { DirectionalLight } from "three";
+import { Color, Group, Vector3 } from "three";
+import type { AmbientLight, DirectionalLight } from "three";
 import { Backdrop } from "./Backdrop";
-import { ENV_GLASSHOUSE, ENV_INTERIOR } from "./environments";
+import { ENV_INTERIOR, sampleEnvironment } from "./environments";
 import { PlantSystem } from "./PlantSystem";
 import { Tower } from "./Tower";
 import { useScrollStory } from "./useScrollStory";
@@ -131,9 +131,16 @@ interface StoryRigProps {
   reducedMotion: boolean;
 }
 
+const lerpValue = (from: number, to: number, mix: number) => from + (to - from) * mix;
+
 function StoryRig({ onTelemetry, reducedMotion }: StoryRigProps) {
   const towerRef = useRef<Group>(null);
   const keyRef = useRef<DirectionalLight>(null);
+  const fillRef = useRef<AmbientLight>(null);
+  const keyFrom = useMemo(() => new Color(), []);
+  const keyTo = useMemo(() => new Color(), []);
+  const fillFrom = useMemo(() => new Color(), []);
+  const fillTo = useMemo(() => new Color(), []);
   const frames = useRef(0);
   const elapsed = useRef(0);
   const fps = useRef(60);
@@ -153,22 +160,35 @@ function StoryRig({ onTelemetry, reducedMotion }: StoryRigProps) {
       easing.damp(tower.rotation, "y", target, ROTATION_SMOOTH_TIME, delta);
     }
 
-    // Key light drifts with the environment cross-fade so the two
-    // environments are lit differently without the tower's own exposure
-    // visibly jumping at the boundary.
+    // Lighting is sampled from the SAME environment curve the backdrop
+    // uses, so the key light always arrives from the window that is
+    // actually in frame. Damping on top means a fast scroll through a
+    // boundary still relights at a watchable rate rather than snapping.
+    const { from, to, mix } = sampleEnvironment(progress);
     const key = keyRef.current;
     if (key) {
-      const envMix = Math.min(1, Math.max(0, (progress - 0.44) / 0.19));
-      easing.damp(
-        key,
-        "intensity",
-        ENV_INTERIOR.keyIntensity +
-          (ENV_GLASSHOUSE.keyIntensity - ENV_INTERIOR.keyIntensity) * envMix,
-        0.4,
+      easing.damp(key, "intensity", lerpValue(from.keyIntensity, to.keyIntensity, mix), 0.4, delta);
+      easing.damp3(
+        key.position,
+        [
+          lerpValue(from.keyPosition[0], to.keyPosition[0], mix),
+          lerpValue(from.keyPosition[1], to.keyPosition[1], mix),
+          lerpValue(from.keyPosition[2], to.keyPosition[2], mix),
+        ],
+        0.55,
         delta
       );
-      easing.damp(key.position, "x", -3.2 + 4.4 * envMix, 0.6, delta);
-      easing.damp(key.position, "y", 4.2 + 1.6 * envMix, 0.6, delta);
+      keyFrom.set(from.keyColor);
+      keyTo.set(to.keyColor);
+      key.color.copy(keyFrom).lerp(keyTo, mix);
+    }
+
+    const fill = fillRef.current;
+    if (fill) {
+      easing.damp(fill, "intensity", lerpValue(from.fillIntensity, to.fillIntensity, mix), 0.4, delta);
+      fillFrom.set(from.fillColor);
+      fillTo.set(to.fillColor);
+      fill.color.copy(fillFrom).lerp(fillTo, mix);
     }
 
     frames.current += 1;
@@ -193,11 +213,15 @@ function StoryRig({ onTelemetry, reducedMotion }: StoryRigProps) {
   // contact shadow goes soft and muddy.
   return (
     <>
-      <ambientLight intensity={ENV_INTERIOR.fillIntensity} color={ENV_INTERIOR.fillColor} />
+      <fogExp2
+        attach="fog"
+        args={[ENV_INTERIOR.fogColor, ENV_INTERIOR.fogDensity]}
+      />
+      <ambientLight ref={fillRef} intensity={ENV_INTERIOR.fillIntensity} color={ENV_INTERIOR.fillColor} />
       <hemisphereLight args={["#f2f5f1", "#b9c6bc", 0.55]} />
       <directionalLight
         ref={keyRef}
-        position={[-3.2, 4.2, 2.6]}
+        position={ENV_INTERIOR.keyPosition}
         intensity={ENV_INTERIOR.keyIntensity}
         color={ENV_INTERIOR.keyColor}
         castShadow
@@ -205,11 +229,11 @@ function StoryRig({ onTelemetry, reducedMotion }: StoryRigProps) {
         shadow-bias={-0.0006}
         shadow-normalBias={0.02}
         shadow-camera-near={0.5}
-        shadow-camera-far={14}
-        shadow-camera-left={-2.2}
-        shadow-camera-right={2.2}
-        shadow-camera-top={3.0}
-        shadow-camera-bottom={-0.6}
+        shadow-camera-far={26}
+        shadow-camera-left={-4.5}
+        shadow-camera-right={4.5}
+        shadow-camera-top={4.5}
+        shadow-camera-bottom={-1.5}
       />
 
       {/* Procedural IBL: gives the shell's clearcoat something real to
@@ -241,7 +265,7 @@ function StoryRig({ onTelemetry, reducedMotion }: StoryRigProps) {
         />
       </Environment>
 
-      <Backdrop from={ENV_INTERIOR} to={ENV_GLASSHOUSE} />
+      <Backdrop />
 
       {/* The tower group is the ONLY thing scroll rotates. Plants are
           children, so the canopy travels with the object for free. */}

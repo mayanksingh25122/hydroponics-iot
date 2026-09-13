@@ -37,15 +37,28 @@ const GROWTH_ATTRIBUTE = "aGrowth";
 const LEAVES_PER_POD = 7;
 const INSTANCE_COUNT = POD_SOCKETS.length * LEAVES_PER_POD;
 
-/** Blade dimensions in metres — a mature leaf is ~11cm long. */
-const LEAF_LENGTH = 0.11;
-const LEAF_WIDTH = 0.042;
-const LEAF_CURVE = 0.022;
+/**
+ * Blade dimensions in metres.
+ *
+ * Shorter and wider than a literal lettuce leaf. At 11cm the blades
+ * were realistic and wrong: forty pods of long tapered leaves read as
+ * spikes and took contrast away from the tower, which the brief makes
+ * the one thing that must never happen. Squatter, broader blades read
+ * as a canopy and stay subordinate to the object they grow on.
+ */
+const LEAF_LENGTH = 0.085;
+const LEAF_WIDTH = 0.055;
+const LEAF_CURVE = 0.026;
 const LEAF_SEGMENTS = 4;
 
-/** Young growth is paler and yellower; mature leaves deepen and cool. */
-const YOUNG_COLOR = new Color("#9fc98a");
-const MATURE_COLOR = new Color("#3f7d4f");
+/**
+ * Young growth is paler and yellower; mature leaves deepen and cool.
+ * Both are desaturated to sit inside the scene's narrow value range —
+ * a saturated green canopy fights the architectural palette and pulls
+ * the eye off the tower.
+ */
+const YOUNG_COLOR = new Color("#a8c39a");
+const MATURE_COLOR = new Color("#5c8566");
 
 /**
  * A single leaf blade pointing along +Y, width in X, arcing in +Z.
