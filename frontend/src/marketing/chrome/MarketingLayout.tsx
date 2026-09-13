@@ -28,6 +28,27 @@ export default function MarketingLayout() {
   const status = useAuthStore((state) => state.status);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  /**
+   * The public site commits to one look, and it is the light one.
+   *
+   * VERDA's tokens follow prefers-color-scheme, which is right for the
+   * dashboard — an operator staring at it all day should get the theme
+   * they asked their OS for. It is wrong here: all nine 3D environments
+   * are daylight interiors and cannot follow a theme, so a dark-OS
+   * visitor got dark chrome wrapped around a sunlit room. Pinning the
+   * attribute is how tokens.css is designed to be overridden, and it is
+   * scoped to this layout, so /app is untouched.
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.getAttribute("data-theme");
+    root.setAttribute("data-theme", "light");
+    return () => {
+      if (previous === null) root.removeAttribute("data-theme");
+      else root.setAttribute("data-theme", previous);
+    };
+  }, []);
+
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (event: KeyboardEvent) => {

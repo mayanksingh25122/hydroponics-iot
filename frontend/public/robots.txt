@@ -1,0 +1,19 @@
+# VERDA Agritech
+#
+# The public marketing tier is crawlable. The application tier is not:
+# every path under /app requires a session, so a crawler can only ever
+# reach a redirect to /login, and /lab/tower is an internal rendering
+# rig that should never appear in results.
+#
+# Sitemap: add the line below once the production domain is decided —
+#   Sitemap: https://<domain>/sitemap.xml
+# A sitemap pointing at the wrong origin is worse than none at all,
+# which is why one is not committed yet.
+
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /app/
+Disallow: /lab/
+Disallow: /login
+Disallow: /signup

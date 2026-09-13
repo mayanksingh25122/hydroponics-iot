@@ -1,15 +1,69 @@
 <!doctype html>
+<!--
+  `class="dark"` drives the legacy Canopy tokens that still style the
+  dashboard. It deliberately does NOT affect the public site, whose
+  VERDA tokens key off prefers-color-scheme. Removing it is part of the
+  design-system convergence work, not of shipping the marketing tier.
+-->
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f0f2ee" />
+
+    <title>VERDA Agritech — hydroponic systems that run themselves</title>
     <meta
       name="description"
-      content="VERDA — live monitoring and control for a hydroponic nutrient system: pH, EC/TDS, water temperature, reservoir level, and pump control."
+      content="Automated hydroponic systems and everything that keeps them running: closed-loop nutrient dosing, continuous monitoring, in-house consumables and a written operating procedure. A smart tower for homes and cafés, NFT installations for commercial growers."
     />
-    <meta name="theme-color" content="#0E1D17" />
-    <title>VERDA</title>
+
+    <!--
+      Every claim below is SHIPPING tier. Structured data is exactly
+      where an over-claim gets quoted back at you, so nothing here
+      describes the camera rig, the lab, or anything else still being
+      built. See src/marketing/content/claims.ts.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="VERDA Agritech" />
+    <meta property="og:title" content="VERDA Agritech — hydroponic systems that run themselves" />
+    <meta
+      property="og:description"
+      content="Closed-loop nutrient dosing, continuous monitoring, consumables we make ourselves, and a written operating procedure. A smart tower for homes and cafés, NFT installations for commercial growers."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="VERDA Agritech — hydroponic systems that run themselves" />
+    <meta
+      name="twitter:description"
+      content="Closed-loop nutrient dosing, continuous monitoring, consumables we make ourselves, and a written operating procedure."
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "VERDA Agritech",
+        "description": "Builds automated hydroponic systems and supplies the seeds, growing media, nutrient formulations and operating procedures that keep them running.",
+        "makesOffer": [
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Product",
+              "name": "VERDA smart tower",
+              "description": "A vertical hydroponic tower with 40 growing sites, automated two-part nutrient dosing and continuous monitoring, for homes, balconies and cafés."
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Product",
+              "name": "VERDA commercial farm",
+              "description": "NFT installations for commercial growers, hospitality groups and institutional kitchens, with automated dosing, monitoring and a written operating procedure."
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
