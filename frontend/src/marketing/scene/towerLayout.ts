@@ -29,9 +29,18 @@ export const BASE_RADIUS_BOTTOM = 0.24;
 export const CAP_HEIGHT = 0.12;
 export const CAP_RADIUS = 0.17;
 
-/** Growing column spans base top → cap bottom, divided into segments. */
-export const SEGMENT_COUNT = 6;
-export const PODS_PER_SEGMENT = 4;
+/**
+ * Growing column spans base top → cap bottom, divided into segments.
+ *
+ * 8 × 5 = 40 growing sites, sitting mid-range of the 30–48 quoted for
+ * the smart tower in the company narrative (§4.2). Site count is the
+ * single most load-bearing product number in this file: it is quoted to
+ * customers, it sets consumable volume, and it drives the whole canopy.
+ * Change it here and the geometry, the plant canopy and the growth
+ * stagger all follow — nothing downstream hardcodes 40.
+ */
+export const SEGMENT_COUNT = 8;
+export const PODS_PER_SEGMENT = 5;
 export const POD_COUNT = SEGMENT_COUNT * PODS_PER_SEGMENT;
 
 export const COLUMN_BOTTOM = BASE_HEIGHT;
@@ -41,12 +50,14 @@ export const SEGMENT_HEIGHT = COLUMN_HEIGHT / SEGMENT_COUNT;
 
 /**
  * Each segment is rotated relative to the one below it, so the pods
- * describe a helix rather than four vertical columns. 15° per segment
- * over 6 segments sweeps 90° in total — by the top segment the pods sit
- * exactly between the bottom segment's, which is what stops the tower
- * reading as a flat facade from any single angle.
+ * describe a helix rather than vertical columns of pods.
+ *
+ * Derived, not hardcoded: one pod-pitch (360° / pods-per-segment) spread
+ * across the full stack. By the top segment the pods sit exactly between
+ * the bottom segment's, which is what stops the tower reading as a flat
+ * facade from any single angle — and it stays true for any site count.
  */
-export const SEGMENT_TWIST_DEG = 15;
+export const SEGMENT_TWIST_DEG = 360 / PODS_PER_SEGMENT / SEGMENT_COUNT;
 
 /**
  * Pod collar protrudes from the shell, angled up so water drains inward.
@@ -57,9 +68,9 @@ export const SEGMENT_TWIST_DEG = 15;
  * pod read as an aperture cut INTO the surface, which is both what real
  * vertical towers look like and what keeps the object architectural.
  */
-export const POD_LENGTH = 0.052;
-export const POD_RADIUS_OUTER = 0.05;
-export const POD_RADIUS_INNER = 0.036;
+export const POD_LENGTH = 0.046;
+export const POD_RADIUS_OUTER = 0.043;
+export const POD_RADIUS_INNER = 0.031;
 export const POD_TILT_DEG = 34;
 
 export interface PodSocket {
