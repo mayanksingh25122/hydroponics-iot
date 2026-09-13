@@ -18,7 +18,7 @@ export function RequireAdmin() {
   const role = useAuthStore((state) => state.user?.role);
 
   if (role !== "admin") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   return <Outlet />;

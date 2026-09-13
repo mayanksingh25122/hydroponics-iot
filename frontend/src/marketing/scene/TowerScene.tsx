@@ -52,14 +52,33 @@ interface CameraKey {
  * acts extend this table; the interpolation code does not change.
  */
 const CAMERA_PATH: CameraKey[] = [
-  { at: 0.0, position: [0.0, 1.18, 3.55], lookAt: [0, 0.95, 0] },
-  { at: 0.28, position: [0.0, 1.02, 2.95], lookAt: [0, 0.92, 0] },
-  { at: 0.55, position: [0.35, 1.25, 3.2], lookAt: [0, 1.0, 0] },
-  { at: 0.8, position: [0.0, 1.45, 4.1], lookAt: [0, 0.95, 0] },
-  { at: 1.0, position: [0.0, 1.5, 4.9], lookAt: [0, 0.9, 0] },
+  { at: 0.0, position: [0.0, 1.15, 4.35], lookAt: [0, 0.92, 0] },
+  { at: 0.28, position: [0.0, 1.0, 3.75], lookAt: [0, 0.9, 0] },
+  { at: 0.55, position: [0.35, 1.25, 4.05], lookAt: [0, 0.98, 0] },
+  { at: 0.8, position: [0.0, 1.5, 4.9], lookAt: [0, 0.95, 0] },
+  { at: 1.0, position: [0.0, 1.55, 5.7], lookAt: [0, 0.9, 0] },
 ];
 
-function samplePath(progress: number, out: Vector3, lookOut: Vector3) {
+/**
+ * Horizontal framing offset, by viewport aspect.
+ *
+ * On a wide viewport the narrative copy occupies the left third, so the
+ * tower is panned right out from under it — the camera and its look-at
+ * point shift together by the same amount, which slides the object
+ * across the frame without rotating the view or introducing parallax
+ * that would betray the move.
+ *
+ * On a portrait viewport the copy stacks below the object instead, so
+ * the tower stays centred and the offset is zero.
+ */
+function framingShift(aspect: number): number {
+  if (aspect < 1.1) return 0;
+  // Ramps in across the range where a side-by-side layout starts to fit.
+  const t = Math.min(1, (aspect - 1.1) / 0.5);
+  return -0.46 * t;
+}
+
+function samplePath(progress: number, shiftX: number, out: Vector3, lookOut: Vector3) {
   let upper = 1;
   while (upper < CAMERA_PATH.length - 1 && CAMERA_PATH[upper].at < progress) upper++;
   const a = CAMERA_PATH[upper - 1];
@@ -71,13 +90,17 @@ function samplePath(progress: number, out: Vector3, lookOut: Vector3) {
   // where two segments meet — damping alone would not hide a corner.
   const s = t * t * (3 - 2 * t);
 
+  // The framing shift is folded into the write rather than added
+  // afterwards: these vectors are scratch buffers owned by the caller,
+  // and writing them once keeps the frame loop free of read-modify-write
+  // on values that live across renders.
   out.set(
-    a.position[0] + (b.position[0] - a.position[0]) * s,
+    shiftX + a.position[0] + (b.position[0] - a.position[0]) * s,
     a.position[1] + (b.position[1] - a.position[1]) * s,
     a.position[2] + (b.position[2] - a.position[2]) * s
   );
   lookOut.set(
-    a.lookAt[0] + (b.lookAt[0] - a.lookAt[0]) * s,
+    shiftX + a.lookAt[0] + (b.lookAt[0] - a.lookAt[0]) * s,
     a.lookAt[1] + (b.lookAt[1] - a.lookAt[1]) * s,
     a.lookAt[2] + (b.lookAt[2] - a.lookAt[2]) * s
   );
@@ -90,7 +113,7 @@ function CameraRig() {
 
   useFrame((state, delta) => {
     const progress = useScrollStory.getState().progress;
-    samplePath(progress, desired, desiredLook);
+    samplePath(progress, framingShift(state.viewport.aspect), desired, desiredLook);
 
     easing.damp3(state.camera.position, desired, CAMERA_SMOOTH_TIME, delta);
     // The look-at point is damped too. Pointing straight at the raw
