@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import AppShell from "./components/layout/AppShell";
@@ -13,6 +13,14 @@ import { RequireAuth } from "./components/auth/RequireAuth";
 import { RequireAdmin } from "./components/auth/RequireAdmin";
 import { RedirectIfAuthenticated } from "./components/auth/RedirectIfAuthenticated";
 import { useAuthStore } from "./store/useAuthStore";
+
+/**
+ * 3D feasibility prototype (/lab/tower). Lazy so that `three` and the
+ * whole scene layer stay in their own chunk — nothing an authenticated
+ * dashboard user loads should include a WebGL renderer. Public and
+ * additive: it sits outside every guard and changes no existing route.
+ */
+const TowerLab = lazy(() => import("./marketing/lab/TowerLab"));
 
 export default function App() {
   const initialize = useAuthStore((state) => state.initialize);
@@ -56,6 +64,14 @@ export default function App() {
             <RedirectIfAuthenticated>
               <Signup />
             </RedirectIfAuthenticated>
+          }
+        />
+        <Route
+          path="/lab/tower"
+          element={
+            <Suspense fallback={<div className="min-h-screen bg-verda-canvas" />}>
+              <TowerLab />
+            </Suspense>
           }
         />
         <Route path="*" element={<NotFound />} />
