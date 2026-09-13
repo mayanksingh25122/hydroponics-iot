@@ -5,7 +5,7 @@ import { easing } from "maath";
 import { Color, Group, Vector3 } from "three";
 import type { AmbientLight, DirectionalLight } from "three";
 import { Backdrop } from "./Backdrop";
-import { ENV_INTERIOR, sampleEnvironment } from "./environments";
+import { ENV_LIVING_ROOM, sampleEnvironment } from "./environments";
 import { PlantSystem } from "./PlantSystem";
 import { Tower } from "./Tower";
 import { useScrollStory } from "./useScrollStory";
@@ -215,15 +215,15 @@ function StoryRig({ onTelemetry, reducedMotion }: StoryRigProps) {
     <>
       <fogExp2
         attach="fog"
-        args={[ENV_INTERIOR.fogColor, ENV_INTERIOR.fogDensity]}
+        args={[ENV_LIVING_ROOM.fogColor, ENV_LIVING_ROOM.fogDensity]}
       />
-      <ambientLight ref={fillRef} intensity={ENV_INTERIOR.fillIntensity} color={ENV_INTERIOR.fillColor} />
+      <ambientLight ref={fillRef} intensity={ENV_LIVING_ROOM.fillIntensity} color={ENV_LIVING_ROOM.fillColor} />
       <hemisphereLight args={["#f2f5f1", "#b9c6bc", 0.55]} />
       <directionalLight
         ref={keyRef}
-        position={ENV_INTERIOR.keyPosition}
-        intensity={ENV_INTERIOR.keyIntensity}
-        color={ENV_INTERIOR.keyColor}
+        position={ENV_LIVING_ROOM.keyPosition}
+        intensity={ENV_LIVING_ROOM.keyIntensity}
+        color={ENV_LIVING_ROOM.keyColor}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0006}

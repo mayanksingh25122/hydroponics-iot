@@ -1,31 +1,22 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { BackSide, Color, ShaderMaterial } from "three";
-import type {
-  FogExp2,
-  Group,
-  Mesh,
-  MeshBasicMaterial,
-  MeshStandardMaterial,
-} from "three";
-import { ENV_INTERIOR, sampleEnvironment } from "./environments";
+import { BackSide, BoxGeometry, Color, MeshStandardMaterial, Object3D, ShaderMaterial } from "three";
+import type { FogExp2, InstancedMesh, Mesh, MeshBasicMaterial } from "three";
+import { ENV_LIVING_ROOM, MAX_PROPS, sampleEnvironment } from "./environments";
 import { useScrollStory } from "./useScrollStory";
 
 /**
- * The world around the tower: sky shell, ground, back wall, window and
- * three massing blocks.
+ * The world around the tower: sky, ground, back wall, ceiling, window,
+ * and an instanced field of furniture.
  *
- * NOTHING here is ever mounted or unmounted by an act change. The same
- * meshes exist for the whole story and are reshaped and recoloured as
- * scroll moves between environment keyframes — which is the mechanism
- * that lets a living room become a glasshouse without the tower
- * appearing to cut, flicker or shift.
+ * NOTHING here is ever mounted or unmounted by an act change. Every
+ * environment is the same objects at different proportions, so a living
+ * room becomes a café becomes a glasshouse without the tower appearing
+ * to cut, flicker or shift — the brief's one non-negotiable rule.
  *
- * The three massing blocks are deliberately abstract. They read as
- * furniture, counters or channel runs depending on their proportions
- * and the light on them, and at the contrast this scene runs at, that
- * is enough to say "a room" without modelling one. It also means the
- * whole environment costs five draw calls.
+ * All thirty props across all nine rooms are a single InstancedMesh:
+ * one draw call for the entire furnished world, at any scroll position.
+ * The whole built environment costs five draw calls in total.
  */
 
 const vertexShader = /* glsl */ `
@@ -60,78 +51,81 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-/** Scratch colours, allocated once — never inside the frame loop. */
 function makeScratch() {
   return {
-    top: new Color(),
-    horizon: new Color(),
-    bottom: new Color(),
-    glow: new Color(),
     ground: new Color(),
     wall: new Color(),
+    ceiling: new Color(),
     window: new Color(),
-    mass: new Color(),
+    propDark: new Color(),
+    propLight: new Color(),
+    propOut: new Color(),
     fog: new Color(),
     a: new Color(),
     b: new Color(),
+    dummy: new Object3D(),
   };
 }
 
-function lerpColor(
-  out: Color,
-  from: string,
-  to: string,
-  mix: number,
-  a: Color,
-  b: Color,
-) {
+function lerpColor(out: Color, from: string, to: string, mix: number, a: Color, b: Color) {
   a.set(from);
   b.set(to);
   out.copy(a).lerp(b, mix);
 }
 
-const lerp = (from: number, to: number, mix: number) =>
-  from + (to - from) * mix;
+const lerp = (from: number, to: number, mix: number) => from + (to - from) * mix;
 
 export function Backdrop() {
   const skyRef = useRef<Mesh>(null);
   const groundRef = useRef<Mesh>(null);
   const wallRef = useRef<Mesh>(null);
+  const ceilingRef = useRef<Mesh>(null);
   const windowRef = useRef<Mesh>(null);
-  const massGroupRef = useRef<Group>(null);
+  const propsRef = useRef<InstancedMesh>(null);
 
   const scratch = useMemo(() => makeScratch(), []);
 
-  // The sky material owns its own uniforms, and the frame loop reads
-  // them back off the mesh rather than closing over a value created
-  // during render. Same reason as PlantSystem's growth buffer: the
-  // uniforms belong to the GPU object, not to the component.
   const skyMaterial = useMemo(
     () =>
       new ShaderMaterial({
         vertexShader,
         fragmentShader,
         uniforms: {
-          uTop: { value: new Color(ENV_INTERIOR.top) },
-          uHorizon: { value: new Color(ENV_INTERIOR.horizon) },
-          uBottom: { value: new Color(ENV_INTERIOR.bottom) },
-          uGlow: { value: new Color(ENV_INTERIOR.glow) },
-          uGlowDir: {
-            value: [...ENV_INTERIOR.glowDirection] as [number, number, number],
-          },
+          uTop: { value: new Color(ENV_LIVING_ROOM.top) },
+          uHorizon: { value: new Color(ENV_LIVING_ROOM.horizon) },
+          uBottom: { value: new Color(ENV_LIVING_ROOM.bottom) },
+          uGlow: { value: new Color(ENV_LIVING_ROOM.glow) },
+          uGlowDir: { value: [...ENV_LIVING_ROOM.glowDirection] as [number, number, number] },
         },
         side: BackSide,
         depthWrite: false,
         toneMapped: false,
-        // The sky shell must never be dimmed by the scene fog that
-        // gives the masses their atmospheric falloff — it IS the
-        // distance, so fogging it would flatten the whole depth cue.
+        // The sky shell must never be dimmed by the scene fog that gives
+        // the props their atmospheric falloff — it IS the distance, so
+        // fogging it would flatten the whole depth cue.
         fog: false,
       }),
-    [],
+    []
   );
 
-  useFrame((state, delta) => {
+  const propGeometry = useMemo(() => new BoxGeometry(1, 1, 1), []);
+  const propMaterial = useMemo(
+    () => new MeshStandardMaterial({ roughness: 0.9, metalness: 0.02 }),
+    []
+  );
+
+  // three allocates the per-instance colour buffer lazily, on the first
+  // setColorAt. Seeding it here means the frame loop can assume it
+  // exists rather than branching on it every frame.
+  useEffect(() => {
+    const mesh = propsRef.current;
+    if (!mesh) return;
+    const white = new Color(1, 1, 1);
+    for (let i = 0; i < MAX_PROPS; i++) mesh.setColorAt(i, white);
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }, []);
+
+  useFrame((state) => {
     const progress = useScrollStory.getState().progress;
     const { from, to, mix } = sampleEnvironment(progress);
 
@@ -139,209 +133,170 @@ export function Backdrop() {
     const sky = skyRef.current;
     const uniforms = (sky?.material as ShaderMaterial | undefined)?.uniforms;
     if (uniforms) {
-      lerpColor(
-        uniforms.uTop.value,
-        from.top,
-        to.top,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
-      lerpColor(
-        uniforms.uHorizon.value,
-        from.horizon,
-        to.horizon,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
-      lerpColor(
-        uniforms.uBottom.value,
-        from.bottom,
-        to.bottom,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
-      lerpColor(
-        uniforms.uGlow.value,
-        from.glow,
-        to.glow,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
+      lerpColor(uniforms.uTop.value, from.top, to.top, mix, scratch.a, scratch.b);
+      lerpColor(uniforms.uHorizon.value, from.horizon, to.horizon, mix, scratch.a, scratch.b);
+      lerpColor(uniforms.uBottom.value, from.bottom, to.bottom, mix, scratch.a, scratch.b);
+      lerpColor(uniforms.uGlow.value, from.glow, to.glow, mix, scratch.a, scratch.b);
       for (let i = 0; i < 3; i++) {
-        uniforms.uGlowDir.value[i] = lerp(
-          from.glowDirection[i],
-          to.glowDirection[i],
-          mix,
-        );
+        uniforms.uGlowDir.value[i] = lerp(from.glowDirection[i], to.glowDirection[i], mix);
       }
     }
 
     /* ---- Atmospheric perspective ----
-       Fog is what keeps the background subordinate: the further a mass
+       Fog is what keeps the background subordinate: the further a prop
        sits, the closer it drifts to the wall colour, so nothing at
        distance ever competes with the tower for contrast. */
     const fog = state.scene.fog as FogExp2 | null;
     if (fog) {
-      lerpColor(
-        scratch.fog,
-        from.fogColor,
-        to.fogColor,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
+      lerpColor(scratch.fog, from.fogColor, to.fogColor, mix, scratch.a, scratch.b);
       fog.color.copy(scratch.fog);
       fog.density = lerp(from.fogDensity, to.fogDensity, mix);
     }
 
+    /* ---- Presence: the whole built world fades for the cutaway act ---- */
+    const presence = lerp(from.presence, to.presence, mix);
+    const built = presence > 0.005;
+    const wallDistance = lerp(from.wallDistance, to.wallDistance, mix);
+
     /* ---- Ground ---- */
     const ground = groundRef.current;
     if (ground) {
-      lerpColor(
-        scratch.ground,
-        from.ground,
-        to.ground,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
+      lerpColor(scratch.ground, from.ground, to.ground, mix, scratch.a, scratch.b);
       (ground.material as MeshStandardMaterial).color.copy(scratch.ground);
     }
-
-    /* ---- Room presence ----
-       At 0 the built environment is gone and the tower stands in a
-       graded void. Scaling to zero rather than toggling visibility
-       keeps the transition continuous; there is no frame where a wall
-       simply stops existing. */
-    const presence = lerp(from.presence, to.presence, mix);
 
     /* ---- Back wall ---- */
     const wall = wallRef.current;
     if (wall) {
-      lerpColor(
-        scratch.wall,
-        from.wallColor,
-        to.wallColor,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
+      lerpColor(scratch.wall, from.wallColor, to.wallColor, mix, scratch.a, scratch.b);
       const material = wall.material as MeshStandardMaterial;
       material.color.copy(scratch.wall);
       material.opacity = presence;
-      wall.position.z = -lerp(from.wallDistance, to.wallDistance, mix);
-      wall.visible = presence > 0.01;
+      wall.position.z = -wallDistance;
+      wall.visible = built;
+    }
+
+    /* ---- Ceiling. Height 0 means open sky, so it lifts away rather
+       than blinking out — a ceiling that vanishes on a frame boundary
+       is the most obvious tell there is. ---- */
+    const ceiling = ceilingRef.current;
+    if (ceiling) {
+      const height = lerp(from.ceilingHeight, to.ceilingHeight, mix);
+      lerpColor(scratch.ceiling, from.ceilingColor, to.ceilingColor, mix, scratch.a, scratch.b);
+      const material = ceiling.material as MeshBasicMaterial;
+      material.color.copy(scratch.ceiling);
+      material.opacity = presence;
+      ceiling.position.set(0, height, -wallDistance * 0.45);
+      ceiling.visible = built && height > 0.05;
     }
 
     /* ---- Window ---- */
     const windowMesh = windowRef.current;
     if (windowMesh) {
-      lerpColor(
-        scratch.window,
-        from.windowColor,
-        to.windowColor,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
+      lerpColor(scratch.window, from.windowColor, to.windowColor, mix, scratch.a, scratch.b);
       const material = windowMesh.material as MeshBasicMaterial;
       material.color.copy(scratch.window);
       material.opacity = presence;
       windowMesh.position.set(
         lerp(from.windowPosition[0], to.windowPosition[0], mix),
         lerp(from.windowPosition[1], to.windowPosition[1], mix),
-        // Sits a few centimetres proud of the wall so it never z-fights.
-        -lerp(from.wallDistance, to.wallDistance, mix) + 0.04,
+        // Proud of the wall by a few centimetres so it never z-fights.
+        -wallDistance + 0.05
       );
       windowMesh.scale.set(
         lerp(from.windowSize[0], to.windowSize[0], mix),
         lerp(from.windowSize[1], to.windowSize[1], mix),
-        1,
+        1
       );
-      windowMesh.visible = presence > 0.01;
+      windowMesh.visible = built;
     }
 
-    /* ---- Massing blocks ---- */
-    const masses = massGroupRef.current;
-    if (masses) {
-      lerpColor(
-        scratch.mass,
-        from.massColor,
-        to.massColor,
-        mix,
-        scratch.a,
-        scratch.b,
-      );
-      masses.visible = presence > 0.01;
+    /* ---- Furniture ----
+       Slot N in one room morphs into slot N in the next, which is why
+       every environment is padded to the same length. A slot with no
+       counterpart is padded to zero size below the floor, so it grows
+       in place instead of popping. */
+    const props = propsRef.current;
+    if (props) {
+      props.visible = built;
 
-      for (let i = 0; i < masses.children.length; i++) {
-        const mass = masses.children[i] as Mesh;
-        const a = from.masses[i];
-        const b = to.masses[i];
+      lerpColor(scratch.propDark, from.propDark, to.propDark, mix, scratch.a, scratch.b);
+      lerpColor(scratch.propLight, from.propLight, to.propLight, mix, scratch.a, scratch.b);
+
+      const { dummy } = scratch;
+      for (let i = 0; i < MAX_PROPS; i++) {
+        const a = from.props[i];
+        const b = to.props[i];
         if (!a || !b) continue;
 
-        mass.position.set(
-          lerp(a[0], b[0], mix),
-          lerp(a[1], b[1], mix),
-          lerp(a[2], b[2], mix),
+        dummy.position.set(
+          lerp(a.p[0], b.p[0], mix),
+          lerp(a.p[1], b.p[1], mix),
+          lerp(a.p[2], b.p[2], mix)
         );
+        dummy.rotation.set(0, lerp(a.r ?? 0, b.r ?? 0, mix), 0);
         // Geometry is a unit cube, so scale IS the dimension in metres.
-        // Presence multiplies in, so masses shrink away into the void
-        // rather than vanishing on a frame boundary.
-        mass.scale.set(
-          lerp(a[3], b[3], mix) * presence,
-          lerp(a[4], b[4], mix) * presence,
-          lerp(a[5], b[5], mix) * presence,
+        // Presence multiplies in so the room shrinks away into the void
+        // rather than disappearing on a frame boundary. A hard zero
+        // scale produces a degenerate matrix, hence the floor.
+        dummy.scale.set(
+          Math.max(1e-4, lerp(a.s[0], b.s[0], mix) * presence),
+          Math.max(1e-4, lerp(a.s[1], b.s[1], mix) * presence),
+          Math.max(1e-4, lerp(a.s[2], b.s[2], mix) * presence)
         );
-        (mass.material as MeshStandardMaterial).color.copy(scratch.mass);
-      }
-    }
+        dummy.updateMatrix();
+        props.setMatrixAt(i, dummy.matrix);
 
-    void delta;
+        scratch.propOut
+          .copy(scratch.propDark)
+          .lerp(scratch.propLight, lerp(a.t ?? 0.5, b.t ?? 0.5, mix));
+        props.setColorAt(i, scratch.propOut);
+      }
+
+      props.instanceMatrix.needsUpdate = true;
+      if (props.instanceColor) props.instanceColor.needsUpdate = true;
+    }
   });
 
   return (
     <group name="Environment">
-      <mesh
-        ref={skyRef}
-        name="Sky_Shell"
-        material={skyMaterial}
-        renderOrder={-1}
-      >
+      <mesh ref={skyRef} name="Sky_Shell" material={skyMaterial} renderOrder={-1}>
         <sphereGeometry args={[42, 32, 16]} />
       </mesh>
 
-      <mesh
-        name="Ground"
-        ref={groundRef}
-        rotation={[-Math.PI / 2, 0, 0]}
-        receiveShadow
-      >
-        <circleGeometry args={[26, 64]} />
-        <meshStandardMaterial
-          color={ENV_INTERIOR.ground}
-          roughness={0.92}
-          metalness={0}
-        />
+      <mesh name="Ground" ref={groundRef} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <circleGeometry args={[30, 64]} />
+        <meshStandardMaterial color={ENV_LIVING_ROOM.ground} roughness={0.94} metalness={0} />
       </mesh>
 
       <mesh
         name="Back_Wall"
         ref={wallRef}
-        position={[0, 3, -ENV_INTERIOR.wallDistance]}
+        position={[0, 3, -ENV_LIVING_ROOM.wallDistance]}
         receiveShadow
       >
-        <planeGeometry args={[34, 12]} />
+        <planeGeometry args={[40, 14]} />
         <meshStandardMaterial
-          color={ENV_INTERIOR.wallColor}
-          roughness={0.95}
+          color={ENV_LIVING_ROOM.wallColor}
+          roughness={0.96}
           metalness={0}
           transparent
         />
+      </mesh>
+
+      {/* Unlit, like the window. A ceiling is lit from below by bounce
+          off every surface in the room, which a single key light cannot
+          simulate — shaded normally its underside goes to ambient only
+          and reads as a heavy grey slab over a bright room. Painting it
+          flat at the wall's value is both cheaper and truer. */}
+      <mesh
+        name="Ceiling"
+        ref={ceilingRef}
+        rotation={[Math.PI / 2, 0, 0]}
+        position={[0, ENV_LIVING_ROOM.ceilingHeight, -3]}
+      >
+        <planeGeometry args={[30, 22]} />
+        <meshBasicMaterial color={ENV_LIVING_ROOM.ceilingColor} transparent />
       </mesh>
 
       {/* Unlit on purpose: a window is a hole onto something brighter
@@ -350,30 +305,24 @@ export function Backdrop() {
       <mesh name="Window" ref={windowRef}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
-          color={ENV_INTERIOR.windowColor}
+          color={ENV_LIVING_ROOM.windowColor}
           toneMapped={false}
           transparent
           fog={false}
         />
       </mesh>
 
-      <group name="Masses" ref={massGroupRef}>
-        {ENV_INTERIOR.masses.map((mass, i) => (
-          <mesh
-            key={i}
-            position={[mass[0], mass[1], mass[2]]}
-            castShadow
-            receiveShadow
-          >
-            <boxGeometry args={[1, 1, 1]} />
-            <meshStandardMaterial
-              color={ENV_INTERIOR.massColor}
-              roughness={0.88}
-              metalness={0}
-            />
-          </mesh>
-        ))}
-      </group>
+      <instancedMesh
+        name="Furniture"
+        ref={propsRef}
+        args={[propGeometry, propMaterial, MAX_PROPS]}
+        castShadow
+        receiveShadow
+        // Instance transforms change every frame and span the whole room;
+        // a bounding sphere computed once would cull furniture the moment
+        // the camera pulls back into the glasshouse.
+        frustumCulled={false}
+      />
     </group>
   );
 }
