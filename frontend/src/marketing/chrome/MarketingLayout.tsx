@@ -4,7 +4,6 @@ import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerdaLockup } from "@/components/brand/VerdaLockup";
 import { useAuthStore } from "@/store/useAuthStore";
-import { SplashCursorLayer } from "./SplashCursorLayer";
 
 /**
  * Shell for every public page. Nav, footer, and the skip link.
@@ -44,11 +43,6 @@ export default function MarketingLayout() {
 
   return (
     <div className="flex min-h-screen flex-col bg-verda-canvas">
-      {/* Decorative cursor layer. Sits above page content but below the
-          sticky header, and is pointer-events:none, so it never
-          intercepts a click or a focus ring. */}
-      <SplashCursorLayer color="#55f7bc" />
-
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-verda-sm focus:bg-verda-forest-800 focus:px-4 focus:py-2 focus:text-verda-canvas"
