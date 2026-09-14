@@ -51,7 +51,7 @@ export default function Login() {
   const locationState = location.state as
     | { from?: Location; registeredEmail?: string }
     | null;
-  const redirectTo = locationState?.from?.pathname ?? "/";
+  const redirectTo = locationState?.from?.pathname ?? "/app";
 
   // Set by Signup.tsx on a successful registration. New accounts are
   // created inactive (see app/api/v1/routes/auth.py::register), so this

@@ -40,7 +40,7 @@ export interface NavSection {
 export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
-    items: [{ label: "Dashboard", path: "/", icon: LayoutDashboard }],
+    items: [{ label: "Dashboard", path: "/app", icon: LayoutDashboard }],
   },
   {
     label: "Farm",
@@ -53,7 +53,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Intelligence",
     items: [
-      { label: "Analytics", path: "/analytics", icon: BarChart3 },
+      { label: "Analytics", path: "/app/analytics", icon: BarChart3 },
       { label: "Automation", icon: Workflow },
       { label: "AI", icon: Sparkles },
     ],
@@ -61,8 +61,8 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "System",
     items: [
-      { label: "Settings", path: "/settings", icon: Settings },
-      { label: "Approve Users", path: "/admin/users", icon: ShieldCheck, adminOnly: true },
+      { label: "Settings", path: "/app/settings", icon: Settings },
+      { label: "Approve Users", path: "/app/admin/users", icon: ShieldCheck, adminOnly: true },
     ],
   },
 ];

@@ -17,7 +17,7 @@ export function RedirectIfAuthenticated({ children }: RedirectIfAuthenticatedPro
 
   if (status === "authenticated") {
     const from = (location.state as { from?: Location } | null)?.from;
-    return <Navigate to={from?.pathname ?? "/"} replace />;
+    return <Navigate to={from?.pathname ?? "/app"} replace />;
   }
 
   return children;

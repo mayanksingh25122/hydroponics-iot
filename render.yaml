@@ -40,3 +40,44 @@ services:
         sync: false
       - key: BACKEND_API_KEY
         sync: false
+
+  # Public site + dashboard SPA.
+  #
+  # Static hosting: Vite emits a fully pre-built bundle, so there is no
+  # server process and nothing to keep warm. rootDir points Render at
+  # frontend/ before running the build, matching the backend's pattern.
+  #
+  # VITE_API_URL is baked into the bundle AT BUILD TIME, not read at
+  # runtime — src/services/api.ts throws on import if it is missing, so
+  # a deploy without it produces a blank page rather than a degraded
+  # one. It must be set in the Render dashboard before the first build,
+  # and must point at the deployed backend's public origin. Changing it
+  # later requires a rebuild, not a restart.
+  #
+  # The backend's CORS_ALLOW_ORIGINS must in turn include this service's
+  # origin, or every authenticated request fails: the session cookie is
+  # sent cross-origin with credentials, and the backend sets an explicit
+  # origin list rather than "*".
+  - type: web
+    name: verda-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_DEVICE_ID
+        sync: false
+    # Client-side routing: every route below is rendered by React
+    # Router, so a hard refresh or a shared link to /platform must be
+    # served index.html rather than 404ing. Assets are matched first by
+    # the static host, so this does not shadow the bundle.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
